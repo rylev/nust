@@ -4,15 +4,31 @@ use std::io::Read;
 
 #[derive(Debug)]
 enum Instruction {
-    Jump(u16),
     SetInterruptDisable,
     ClearDecimal,
-    LoadAccumImmediate(u8),
-    LoadAccumAbsolute(u16),
-    StoreAccumAbsolute(u16),
-    LoadXImmediate(u8),
+
     TransferXtoStackPointer,
-    BranchOnPlus(u8)
+
+    Jump(AddressMode),
+    LoadAccum(AddressMode),
+    StoreAccum(AddressMode),
+    LoadX(AddressMode),
+    BranchOnPlus(AddressMode)
+}
+
+#[derive(Debug)]
+enum AddressMode {
+    Absolute(u16),
+    AbsolutePlusX(u16),
+    AbsolutePlusY(u16),
+    ZeroPage(u8),
+    ZeroPagePlusX(u8),
+    ZeroPagePlusY(u8),
+    Immediate(u8),
+    Relative(u8),
+    Indirect(u16),
+    IndirectX(u8),
+    IndirectY(u8)
 }
 
 /*
@@ -118,45 +134,45 @@ impl Cpu {
     fn next_instruction(&mut self) -> Instruction {
         let raw_instruction = self.interconnect.read_byte(self.pc);
         match raw_instruction {
-            0x4c => {
-                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
-                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
-                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
-                Instruction::Jump(addr)
-            }
             0x78 => {
                 Instruction::SetInterruptDisable
             }
             0xd8 => {
                 Instruction::ClearDecimal
             }
+            0x9a => {
+                Instruction::TransferXtoStackPointer
+            }
+            0x4c => {
+                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+                println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
+                Instruction::Jump(AddressMode::Absolute(addr))
+            }
             0xa9 => {
                 let value = self.interconnect.read_byte(self.pc + 1);
-                Instruction::LoadAccumImmediate(value)
+                Instruction::LoadAccum(AddressMode::Immediate(value))
             }
             0x8d => {
                 let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
                 let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
                 let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                Instruction::StoreAccumAbsolute(addr)
+                Instruction::StoreAccum(AddressMode::Absolute(addr))
             }
             0xa2 => {
                 let value = self.interconnect.read_byte(self.pc + 1);
-                Instruction::LoadXImmediate(value)
-            }
-            0x9a => {
-                Instruction::TransferXtoStackPointer
+                Instruction::LoadX(AddressMode::Immediate(value))
             }
             0xad => {
                 let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
                 let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
                 let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                Instruction::LoadAccumAbsolute(addr)
+                Instruction::LoadAccum(AddressMode::Absolute(addr))
             }
             0x10 => {
                 let offset = self.interconnect.read_byte(self.pc + 1);
-                Instruction::BranchOnPlus(offset)
+                Instruction::BranchOnPlus(AddressMode::Relative(offset))
             }
             _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
         }
@@ -165,7 +181,11 @@ impl Cpu {
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::Jump(addr) => {
-                addr
+                match addr {
+                    AddressMode::Absolute(addr) => addr,
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+
+                }
             }
             Instruction::SetInterruptDisable => {
                 self.status_reg.interrupt = true;
@@ -175,32 +195,53 @@ impl Cpu {
                 self.status_reg.decimal = false;
                 self.pc + 1
             }
-            Instruction::LoadAccumImmediate(value) => {
+            Instruction::LoadAccum(addr) => {
                 // TODO: This should effect the neagtive and zero flags
-                self.accum = value;
-                self.pc + 2
+                match addr {
+                    AddressMode::Absolute(addr) => {
+                        let value = self.interconnect.read_byte(addr);
+                        self.accum = value;
+                        self.pc + 3
+                    }
+                    AddressMode::Immediate(value) => {
+                        self.accum = value;
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+
+                }
             }
-            Instruction::StoreAccumAbsolute(addr) => {
-                self.interconnect.write_byte(addr, self.accum);
-                self.pc + 3
+            Instruction::StoreAccum(addr) => {
+                match addr {
+                    AddressMode::Absolute(addr) => {
+                        self.interconnect.write_byte(addr, self.accum);
+                        self.pc + 3
+                    }
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                }
             }
-            Instruction::LoadXImmediate(value) => {
+            Instruction::LoadX(addr) => {
                 // TODO: This should effect the neagtive and zero flags
-                self.x = value;
-                self.pc + 2
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.x = value;
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                }
             }
             Instruction::TransferXtoStackPointer => {
                 // TODO: This should effect the neagtive and zero flags
                 self.stack_pointer = self.x;
                 self.pc + 1
             }
-            Instruction::LoadAccumAbsolute(addr) => {
-                // TODO: This should effect the neagtive and zero flags
-                self.interconnect.write_byte(addr, self.accum);
-                self.pc + 3
-            }
-            Instruction::BranchOnPlus(offset) => {
-                self.pc + 1 + (offset as u16)
+            Instruction::BranchOnPlus(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        self.pc + 1 + (offset as u16)
+                    }
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                }
             }
         }
     }
