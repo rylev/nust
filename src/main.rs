@@ -11,7 +11,8 @@ enum Instruction {
     LoadAccumAbsolute(u16),
     StoreAccumAbsolute(u16),
     LoadXImmediate(u8),
-    TransferXtoStackPointer
+    TransferXtoStackPointer,
+    BranchOnPlus(u8)
 }
 
 /*
@@ -68,14 +69,15 @@ impl Interconnect {
 
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            a if a < 0x2000 => self.ram[addr as usize],
+            a if a < 0x7ff => self.ram[addr as usize],
             a if a > 0x8000 => self.rom[(addr - 0x8000) as usize],
             _ => panic!("Reading byte at unrecognized addr 0x{:x}", addr)
         }
     }
 
-    fn write_byte(&self, addr: u16, _byte: u8) {
+    fn write_byte(&mut self, addr: u16, byte: u8) {
         match addr {
+            a if a < 0x7ff => self.ram[addr as usize] = byte,
             a if a >= 0x2000 && a <= 0x2007 => println!("TODO: implement writing to PPU"),
             _ => panic!("Writing addr at unrecognized addr 0x{:x}", addr)
         }
@@ -152,7 +154,11 @@ impl Cpu {
                 let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
                 Instruction::LoadAccumAbsolute(addr)
             }
-            _ => panic!("Unrecognized Byte! {:x}", raw_instruction)
+            0x10 => {
+                let offset = self.interconnect.read_byte(self.pc + 1);
+                Instruction::BranchOnPlus(offset)
+            }
+            _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
         }
     }
 
@@ -192,6 +198,9 @@ impl Cpu {
                 // TODO: This should effect the neagtive and zero flags
                 self.interconnect.write_byte(addr, self.accum);
                 self.pc + 3
+            }
+            Instruction::BranchOnPlus(offset) => {
+                self.pc + 1 + (offset as u16)
             }
         }
     }
