@@ -144,38 +144,48 @@ impl Cpu {
                 Instruction::TransferXtoStackPointer
             }
             0x4c => {
-                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
-                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
-                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
-                Instruction::Jump(AddressMode::Absolute(addr))
+                let addr = self.absolute_address();
+                Instruction::Jump(addr)
             }
+
             0xa9 => {
-                let value = self.interconnect.read_byte(self.pc + 1);
-                Instruction::LoadAccum(AddressMode::Immediate(value))
+                let value = self.immediate_value();
+                Instruction::LoadAccum(value)
             }
             0x8d => {
-                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
-                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
-                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                Instruction::StoreAccum(AddressMode::Absolute(addr))
+                let addr = self.absolute_address();
+                Instruction::StoreAccum(addr)
             }
-            0xa2 => {
-                let value = self.interconnect.read_byte(self.pc + 1);
-                Instruction::LoadX(AddressMode::Immediate(value))
-            }
+
             0xad => {
-                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
-                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
-                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-                Instruction::LoadAccum(AddressMode::Absolute(addr))
+                let addr = self.absolute_address();
+                Instruction::LoadAccum(addr)
             }
+
+            0xa2 => {
+                let value = self.immediate_value();
+                Instruction::LoadX(value)
+            }
+
             0x10 => {
                 let offset = self.interconnect.read_byte(self.pc + 1);
                 Instruction::BranchOnPlus(AddressMode::Relative(offset))
             }
             _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
         }
+    }
+
+    fn immediate_value(&self) -> AddressMode {
+        let value = self.interconnect.read_byte(self.pc + 1);
+        AddressMode::Immediate(value)
+    }
+
+    fn absolute_address(&self) -> AddressMode {
+        let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+        let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+        let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+        println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
+        AddressMode::Absolute(addr)
     }
 
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
