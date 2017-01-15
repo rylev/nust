@@ -2,26 +2,197 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 
+#[derive(Debug)]
+enum Instruction {
+    Jump(u16),
+    SetInterruptDisable,
+    ClearDecimal,
+    LoadAccumImmediate(u8),
+    LoadAccumAbsolute(u16),
+    StoreAccumAbsolute(u16),
+    LoadXImmediate(u8),
+    TransferXtoStackPointer
+}
+
+/*
+ * 7  bit  0
+ * ---- ----
+ * NVss DIZC
+ * |||| ||||
+ * |||| |||+- Carry: 1 if last addition or shift resulted in a carry, or if
+ * |||| |||     last subtraction resulted in no borrow
+ * |||| ||+-- Zero: 1 if last operation resulted in a 0 value
+ * |||| |+--- Interrupt: Interrupt inhibit
+ * |||| |       (0: /IRQ and /NMI get through; 1: only /NMI gets through)
+ * |||| +---- Decimal: 1 to make ADC and SBC use binary-coded decimal arithmetic
+ * ||||         (ignored on second-source 6502 like that in the NES)
+ * ||++------ s: No effect, used by the stack copy, see note below
+ * |+-------- Overflow: 1 if last ADC or SBC resulted in signed overflow,
+ * |            or D6 from last BIT
+ * +--------- Negative: Set to bit 7 of the last operation
+ */
+struct StatusReg {
+    carry: bool,
+    zero: bool,
+    interrupt: bool,
+    decimal: bool,
+    overflow: bool,
+    negative: bool
+}
+
+impl StatusReg {
+    fn new() -> StatusReg {
+        StatusReg {
+            carry: false,
+            zero: false,
+            interrupt: true,
+            decimal: false,
+            overflow: false,
+            negative: false
+        }
+    }
+}
+
+struct Interconnect {
+    ram: [u8; 2 * 1024], // 2 Megabytes
+    rom: Vec<u8>
+}
+
+impl Interconnect {
+    fn new(rom: Vec<u8>) -> Interconnect {
+        Interconnect {
+            ram: [0; 2 * 1024],
+            rom: rom
+        }
+    }
+
+    fn read_byte(&self, addr: u16) -> u8 {
+        match addr {
+            a if a < 0x2000 => self.ram[addr as usize],
+            a if a > 0x8000 => self.rom[(addr - 0x8000) as usize],
+            _ => panic!("Reading byte at unrecognized addr 0x{:x}", addr)
+        }
+    }
+
+    fn write_byte(&self, addr: u16, _byte: u8) {
+        match addr {
+            a if a >= 0x2000 && a <= 0x2007 => println!("TODO: implement writing to PPU"),
+            _ => panic!("Writing addr at unrecognized addr 0x{:x}", addr)
+        }
+    }
+}
 
 struct Cpu {
-    rom: Vec<u8>,
-    isp: u64
+    interconnect: Interconnect,
+    pc: u16,
+    accum: u8,
+    x: u8,
+    y: u8,
+    status_reg: StatusReg,
+    stack_pointer: u8
 }
 
 impl Cpu {
     fn new(rom: Vec<u8>) -> Cpu {
         Cpu {
-            rom: rom,
-            isp: 0
+            interconnect: Interconnect::new(rom),
+            pc: (0x8000 + 0x10), // Roms starts at 0x8000 and the header is 0x10 bytes big
+            accum: 0,
+            x: 0,
+            y: 0,
+            status_reg: StatusReg::new(),
+            stack_pointer: 0
         }
     }
 
     fn run(&mut self) {
         loop {
-            let instruction = self.rom[self.isp as usize];
-            println!("Instruction: {:x}", instruction);
-            self.isp += 1
+            let instruction = self.next_instruction();
+            println!("Executing instruction: {:?}", instruction);
+            self.pc = self.execute_instruction(instruction)
+        }
+    }
 
+    fn next_instruction(&mut self) -> Instruction {
+        let raw_instruction = self.interconnect.read_byte(self.pc);
+        match raw_instruction {
+            0x4c => {
+                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+                println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
+                Instruction::Jump(addr)
+            }
+            0x78 => {
+                Instruction::SetInterruptDisable
+            }
+            0xd8 => {
+                Instruction::ClearDecimal
+            }
+            0xa9 => {
+                let value = self.interconnect.read_byte(self.pc + 1);
+                Instruction::LoadAccumImmediate(value)
+            }
+            0x8d => {
+                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+                Instruction::StoreAccumAbsolute(addr)
+            }
+            0xa2 => {
+                let value = self.interconnect.read_byte(self.pc + 1);
+                Instruction::LoadXImmediate(value)
+            }
+            0x9a => {
+                Instruction::TransferXtoStackPointer
+            }
+            0xad => {
+                let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+                let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+                let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+                Instruction::LoadAccumAbsolute(addr)
+            }
+            _ => panic!("Unrecognized Byte! {:x}", raw_instruction)
+        }
+    }
+
+    fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
+        match instruction {
+            Instruction::Jump(addr) => {
+                addr
+            }
+            Instruction::SetInterruptDisable => {
+                self.status_reg.interrupt = true;
+                self.pc + 1
+            }
+            Instruction::ClearDecimal => {
+                self.status_reg.decimal = false;
+                self.pc + 1
+            }
+            Instruction::LoadAccumImmediate(value) => {
+                // TODO: This should effect the neagtive and zero flags
+                self.accum = value;
+                self.pc + 2
+            }
+            Instruction::StoreAccumAbsolute(addr) => {
+                self.interconnect.write_byte(addr, self.accum);
+                self.pc + 3
+            }
+            Instruction::LoadXImmediate(value) => {
+                // TODO: This should effect the neagtive and zero flags
+                self.x = value;
+                self.pc + 2
+            }
+            Instruction::TransferXtoStackPointer => {
+                // TODO: This should effect the neagtive and zero flags
+                self.stack_pointer = self.x;
+                self.pc + 1
+            }
+            Instruction::LoadAccumAbsolute(addr) => {
+                // TODO: This should effect the neagtive and zero flags
+                self.interconnect.write_byte(addr, self.accum);
+                self.pc + 3
+            }
         }
     }
 }
