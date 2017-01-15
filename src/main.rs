@@ -87,6 +87,10 @@ impl Interconnect {
         match addr {
             a if a < 0x7ff => self.ram[addr as usize],
             a if a > 0x8000 => self.rom[(addr - 0x8000) as usize],
+            a if a >= 0x2000 && a <= 0x2007 => {
+                println!("TODO: implement reading from PPU at address: {:x}", a);
+                0
+            }
             _ => panic!("Reading byte at unrecognized addr 0x{:x}", addr)
         }
     }
@@ -94,7 +98,7 @@ impl Interconnect {
     fn write_byte(&mut self, addr: u16, byte: u8) {
         match addr {
             a if a < 0x7ff => self.ram[addr as usize] = byte,
-            a if a >= 0x2000 && a <= 0x2007 => println!("TODO: implement writing to PPU"),
+            a if a >= 0x2000 && a <= 0x2007 => println!("TODO: implement writing to PPU at address: {:x}", a),
             _ => panic!("Writing addr at unrecognized addr 0x{:x}", addr)
         }
     }
@@ -184,7 +188,6 @@ impl Cpu {
         let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
         let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
         let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-        println!("Combining {:x} and {:x} to jump to {:x}", addr_second, addr_first, addr);
         AddressMode::Absolute(addr)
     }
 
@@ -206,10 +209,11 @@ impl Cpu {
                 self.pc + 1
             }
             Instruction::LoadAccum(addr) => {
-                // TODO: This should effect the neagtive and zero flags
                 match addr {
                     AddressMode::Absolute(addr) => {
                         let value = self.interconnect.read_byte(addr);
+                        self.status_reg.zero = value == 0;
+                        self.status_reg.negative = (value & 0x1) == 1;
                         self.accum = value;
                         self.pc + 3
                     }
@@ -231,9 +235,10 @@ impl Cpu {
                 }
             }
             Instruction::LoadX(addr) => {
-                // TODO: This should effect the neagtive and zero flags
                 match addr {
                     AddressMode::Immediate(value) => {
+                        self.status_reg.zero = value == 0;
+                        self.status_reg.negative = (value & 0x1) == 1;
                         self.x = value;
                         self.pc + 2
                     }
@@ -241,7 +246,8 @@ impl Cpu {
                 }
             }
             Instruction::TransferXtoStackPointer => {
-                // TODO: This should effect the neagtive and zero flags
+                self.status_reg.zero = self.x == 0;
+                self.status_reg.negative = (self.x & 0x1) == 1;
                 self.stack_pointer = self.x;
                 self.pc + 1
             }
