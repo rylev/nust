@@ -177,6 +177,7 @@ impl Ctrl {
     }
 }
 
+#[derive(Debug)]
 struct Mask {
 }
 
@@ -186,6 +187,7 @@ impl Mask {
     }
 }
 
+#[derive(Debug)]
 struct PPU {
     ctrl: Ctrl,
     mask: Mask,
@@ -270,6 +272,11 @@ struct Cpu {
     status_reg: StatusReg,
     stack_pointer: u8
 }
+impl std::fmt::Debug for Cpu {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Cpu {{ pc: {:x}, accum: {}, x: {}, y: {}, stack_pointer: {}, status_reg: {:?} }}", self.pc, self.accum, self.x, self.y, self.stack_pointer, self.status_reg)
+    }
+}
 
 impl Cpu {
     fn new(rom: Vec<u8>) -> Cpu {
@@ -286,14 +293,17 @@ impl Cpu {
 
     fn run(&mut self) {
         loop {
+            println!("Before: {:?}", self);
             let instruction = self.next_instruction();
             println!("Executing instruction: {:?}", instruction);
-            self.pc = self.execute_instruction(instruction)
+            self.pc = self.execute_instruction(instruction);
+            println!("Done\n\n");
         }
     }
 
     fn next_instruction(&mut self) -> Instruction {
         let raw_instruction = self.interconnect.read_byte(self.pc);
+        println!("Raw instruction: {:x}", raw_instruction);
         match raw_instruction {
             0x78 => {
                 Instruction::SetInterruptDisable
@@ -342,7 +352,7 @@ impl Cpu {
             }
             _ => {
                 match 0xF & raw_instruction {
-                    0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F"),
+                    0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
                     _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
                 }
             }
@@ -442,9 +452,15 @@ impl Cpu {
                 match addr {
                     AddressMode::Relative(offset) => {
                         if self.status_reg.negative {
-                            self.pc + 1
+                            self.pc + 2
                         } else {
-                            self.pc + 1 + (offset as u16)
+                            let negative = (0b1000_0000 & offset) == 1;
+                            let value = (offset & 0b01111111) as u16;
+                            if negative {
+                                self.pc + 2 - value
+                            } else {
+                                self.pc + 2 + value
+                            }
                         }
                     }
                     _ => panic!("Unrecognized branch of plus addr {:?}", addr)
@@ -454,9 +470,9 @@ impl Cpu {
                 match addr {
                     AddressMode::Relative(offset) => {
                         if self.status_reg.zero {
-                            self.pc + 1 + (offset as u16)
+                            self.pc + 2 + (offset as u16)
                         } else {
-                            self.pc + 1
+                            self.pc + 2
                         }
                     }
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
