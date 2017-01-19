@@ -19,8 +19,8 @@ enum Instruction {
 #[derive(Debug)]
 enum AddressMode {
     Absolute(u16),
-    AbsolutePlusX(u16),
-    AbsolutePlusY(u16),
+    AbsolutePlusX(u16, u8),
+    AbsolutePlusY(u16, u8),
     ZeroPage(u8),
     ZeroPagePlusX(u8),
     ZeroPagePlusY(u8),
@@ -172,8 +172,12 @@ impl Cpu {
             }
 
             0x10 => {
-                let offset = self.interconnect.read_byte(self.pc + 1);
-                Instruction::BranchOnPlus(AddressMode::Relative(offset))
+                let addr = self.relative_address();
+                Instruction::BranchOnPlus(addr)
+            }
+            0xbd => {
+                let addr = self.absolute_plus_x_address();
+                Instruction::LoadAccum(addr)
             }
             _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
         }
@@ -189,6 +193,19 @@ impl Cpu {
         let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
         let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
         AddressMode::Absolute(addr)
+    }
+
+    fn relative_address(&self) -> AddressMode {
+        let offset = self.interconnect.read_byte(self.pc + 1);
+        AddressMode::Relative(offset)
+    }
+
+    fn absolute_plus_x_address(&self) -> AddressMode {
+        let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
+        let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
+        let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+        let x = self.x;
+        AddressMode::AbsolutePlusX(addr, x)
     }
 
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
@@ -209,21 +226,25 @@ impl Cpu {
                 self.pc + 1
             }
             Instruction::LoadAccum(addr) => {
-                match addr {
+                let(value, pc_offset) = match addr {
                     AddressMode::Absolute(addr) => {
                         let value = self.interconnect.read_byte(addr);
-                        self.status_reg.zero = value == 0;
-                        self.status_reg.negative = (value & 0x1) == 1;
-                        self.accum = value;
-                        self.pc + 3
+                        (value, 3)
                     }
                     AddressMode::Immediate(value) => {
-                        self.accum = value;
-                        self.pc + 2
+                        (value, 2)
                     }
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                    AddressMode::AbsolutePlusX(addr, offset) => {
+                        let value = self.interconnect.read_byte(addr + offset as u16);
+                        (value, 3)
+                    }
+                    _ => panic!("Unrecognized load accum addr {:?}", addr)
+                };
 
-                }
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value & 0x1) == 1;
+                self.accum = value;
+                self.pc + pc_offset
             }
             Instruction::StoreAccum(addr) => {
                 match addr {
@@ -231,7 +252,7 @@ impl Cpu {
                         self.interconnect.write_byte(addr, self.accum);
                         self.pc + 3
                     }
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                    _ => panic!("Unrecognized store accum addr {:?}", addr)
                 }
             }
             Instruction::LoadX(addr) => {
@@ -242,7 +263,7 @@ impl Cpu {
                         self.x = value;
                         self.pc + 2
                     }
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                    _ => panic!("Unrecognized load x addr {:?}", addr)
                 }
             }
             Instruction::TransferXtoStackPointer => {
@@ -256,7 +277,7 @@ impl Cpu {
                     AddressMode::Relative(offset) => {
                         self.pc + 1 + (offset as u16)
                     }
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
+                    _ => panic!("Unrecognized branch of plus addr {:?}", addr)
                 }
             }
         }
