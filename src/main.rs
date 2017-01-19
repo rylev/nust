@@ -237,6 +237,7 @@ impl Interconnect {
                 println!("Reading from PPU at address: {:x}", a);
                 let offset = a - 0x2000;
                 match offset {
+                    0x2 => self.ppu.status,
                     _ => panic!("reading from ppu offset {:x} is not supported", offset)
                 }
             }
@@ -339,7 +340,12 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnEqual(addr)
             }
-            _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
+            _ => {
+                match 0xF & raw_instruction {
+                    0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F"),
+                    _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
+                }
+            }
         }
     }
 
