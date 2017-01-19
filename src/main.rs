@@ -13,7 +13,8 @@ enum Instruction {
     LoadAccum(AddressMode),
     StoreAccum(AddressMode),
     LoadX(AddressMode),
-    BranchOnPlus(AddressMode)
+    BranchOnPlus(AddressMode),
+    BranchOnEqual(AddressMode)
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ enum AddressMode {
  * |            or D6 from last BIT
  * +--------- Negative: Set to bit 7 of the last operation
  */
+#[derive(Debug)]
 struct StatusReg {
     carry: bool,
     zero: bool,
@@ -70,16 +72,160 @@ impl StatusReg {
     }
 }
 
+#[derive(Debug)]
+enum BaseNameTableAddress {
+    Hex2000,
+    Hex2400,
+    Hex2800,
+    Hex2C00
+}
+#[derive(Debug)]
+enum VramAddressIncrement {
+    Add1Across,
+    Add32Down
+}
+#[derive(Debug)]
+enum PatternTableAddress {
+    Hex0,
+    Hex1000
+}
+#[derive(Debug)]
+enum SpriteSize {
+    EightByEight,
+    EightBySixteen
+}
+#[derive(Debug)]
+enum MasterSlaveSelect {
+    Read,
+    Write
+}
+#[derive(Debug)]
+enum GenerateMni {
+    Off,
+    On
+}
+#[derive(Debug)]
+struct Ctrl {
+    base_nametable_address: BaseNameTableAddress,
+    vram_address_increment: VramAddressIncrement,
+    sprite_pattern_table_address: PatternTableAddress,
+    background_pattern_table_address: PatternTableAddress,
+    sprite_size: SpriteSize,
+    master_slave_select: MasterSlaveSelect,
+    generate_nmi: GenerateMni
+}
+
+impl Ctrl {
+    fn new() -> Ctrl {
+        Ctrl {
+            base_nametable_address: BaseNameTableAddress::Hex2000,
+            vram_address_increment: VramAddressIncrement::Add1Across,
+            sprite_pattern_table_address: PatternTableAddress::Hex0,
+            background_pattern_table_address: PatternTableAddress::Hex0,
+            sprite_size: SpriteSize::EightByEight,
+            master_slave_select: MasterSlaveSelect::Read,
+            generate_nmi: GenerateMni::Off
+        }
+    }
+
+    fn from_byte(byte: u8) -> Ctrl {
+        let base_nametable_address = match byte & 0b11000000 {
+            0b00 => BaseNameTableAddress::Hex2000,
+            0b01 => BaseNameTableAddress::Hex2400,
+            0b10 => BaseNameTableAddress::Hex2800,
+            _ => BaseNameTableAddress::Hex2C00,
+        };
+        let vram_address_increment = match byte & 0b100000 {
+            0b0 => VramAddressIncrement::Add1Across,
+            _ => VramAddressIncrement::Add32Down
+        };
+        let sprite_pattern_table_address = match byte & 0b10000 {
+            0b0 => PatternTableAddress::Hex0,
+            _ => PatternTableAddress::Hex1000
+        };
+
+        let background_pattern_table_address = match byte & 0b1000 {
+            0b0 => PatternTableAddress::Hex0,
+            _ => PatternTableAddress::Hex1000
+        };
+
+        let sprite_size = match byte & 0b100 {
+            0b0 => SpriteSize::EightByEight,
+            _ => SpriteSize::EightBySixteen,
+        };
+
+        let master_slave_select = match byte & 0b10 {
+            0b0 => MasterSlaveSelect::Read,
+            _ => MasterSlaveSelect::Write
+        };
+
+        let generate_nmi = match byte & 0b1 {
+            0b0 => GenerateMni::Off,
+            _ => GenerateMni::On
+        };
+        Ctrl {
+            base_nametable_address: base_nametable_address,
+            vram_address_increment: vram_address_increment,
+            sprite_pattern_table_address: sprite_pattern_table_address,
+            background_pattern_table_address: background_pattern_table_address,
+            sprite_size: sprite_size,
+            master_slave_select: master_slave_select,
+            generate_nmi: generate_nmi
+
+        }
+
+    }
+}
+
+struct Mask {
+}
+
+impl Mask {
+    fn new() -> Mask {
+        Mask {}
+    }
+}
+
+struct PPU {
+    ctrl: Ctrl,
+    mask: Mask,
+    status: u8,
+    oamaddr: u8,
+    oamdata: u8,
+    scroll: u8,
+    addr: u8,
+    data: u8,
+    oamdma: u8
+}
+
+impl PPU {
+    fn new() -> PPU {
+        PPU {
+            ctrl: Ctrl::new(),
+            mask: Mask::new(),
+            status: 0,
+            oamaddr: 0,
+            oamdata: 0,
+            scroll: 0,
+            addr: 0,
+            data: 0,
+            oamdma: 0
+        }
+    }
+}
+
 struct Interconnect {
     ram: [u8; 2 * 1024], // 2 Megabytes
-    rom: Vec<u8>
+    rom: Vec<u8>,
+    ppu: PPU
 }
 
 impl Interconnect {
     fn new(rom: Vec<u8>) -> Interconnect {
         Interconnect {
             ram: [0; 2 * 1024],
-            rom: rom
+            rom: rom,
+            ppu: PPU::new()
         }
     }
 
@@ -88,8 +234,11 @@ impl Interconnect {
             a if a < 0x7ff => self.ram[addr as usize],
             a if a > 0x8000 => self.rom[(addr - 0x8000) as usize],
             a if a >= 0x2000 && a <= 0x2007 => {
-                println!("TODO: implement reading from PPU at address: {:x}", a);
-                0
+                println!("Reading from PPU at address: {:x}", a);
+                let offset = a - 0x2000;
+                match offset {
+                    _ => panic!("reading from ppu offset {:x} is not supported", offset)
+                }
             }
             _ => panic!("Reading byte at unrecognized addr 0x{:x}", addr)
         }
@@ -98,7 +247,14 @@ impl Interconnect {
     fn write_byte(&mut self, addr: u16, byte: u8) {
         match addr {
             a if a < 0x7ff => self.ram[addr as usize] = byte,
-            a if a >= 0x2000 && a <= 0x2007 => println!("TODO: implement writing to PPU at address: {:x}", a),
+            a if a >= 0x2000 && a <= 0x2007 => {
+                println!("Writing to PPU at address: {:x}", a);
+                let offset = a - 0x2000;
+                match offset {
+                    0x0 => self.ppu.ctrl = Ctrl::from_byte(byte),
+                    _ => panic!("writing to ppu offset {:x} is not supported", offset)
+                };
+            }
             _ => panic!("Writing addr at unrecognized addr 0x{:x}", addr)
         }
     }
@@ -178,6 +334,10 @@ impl Cpu {
             0xbd => {
                 let addr = self.absolute_plus_x_address();
                 Instruction::LoadAccum(addr)
+            }
+            0xf0 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnEqual(addr)
             }
             _ => panic!("Unrecognized instruction byte! {:x}", raw_instruction)
         }
@@ -275,9 +435,25 @@ impl Cpu {
             Instruction::BranchOnPlus(addr) => {
                 match addr {
                     AddressMode::Relative(offset) => {
-                        self.pc + 1 + (offset as u16)
+                        if self.status_reg.negative {
+                            self.pc + 1
+                        } else {
+                            self.pc + 1 + (offset as u16)
+                        }
                     }
                     _ => panic!("Unrecognized branch of plus addr {:?}", addr)
+                }
+            }
+            Instruction::BranchOnEqual(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        if self.status_reg.zero {
+                            self.pc + 1 + (offset as u16)
+                        } else {
+                            self.pc + 1
+                        }
+                    }
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
         }
