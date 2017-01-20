@@ -6,6 +6,7 @@ use std::io::Read;
 enum Instruction {
     SetInterruptDisable,
     ClearDecimal,
+    SetCarry,
 
     TransferXtoStackPointer,
 
@@ -17,6 +18,7 @@ enum Instruction {
     StoreX(AddressMode),
     BranchOnPlus(AddressMode),
     BranchOnEqual(AddressMode),
+    BranchOnCarry(AddressMode),
     Noop
 }
 
@@ -326,6 +328,9 @@ impl Cpu {
             0x9a => {
                 Instruction::TransferXtoStackPointer
             }
+            0x38 => {
+                Instruction::SetCarry
+            }
             0x4c => {
                 let addr = self.absolute_address();
                 Instruction::Jump(addr)
@@ -366,6 +371,11 @@ impl Cpu {
             0xf0 => {
                 let addr = self.relative_address();
                 Instruction::BranchOnEqual(addr)
+            }
+            0xb0 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnCarry(addr)
+
             }
             0x20 => {
                 let addr = self.absolute_address();
@@ -438,6 +448,10 @@ impl Cpu {
             }
             Instruction::ClearDecimal => {
                 self.status_reg.decimal = false;
+                self.pc + 1
+            }
+            Instruction::SetCarry => {
+                self.status_reg.carry = true;
                 self.pc + 1
             }
             Instruction::LoadAccum(addr) => {
@@ -519,6 +533,18 @@ impl Cpu {
                 match addr {
                     AddressMode::Relative(offset) => {
                         if self.status_reg.zero {
+                            self.pc + 2 + (offset as u16)
+                        } else {
+                            self.pc + 2
+                        }
+                    }
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
+            Instruction::BranchOnCarry(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        if self.status_reg.carry {
                             self.pc + 2 + (offset as u16)
                         } else {
                             self.pc + 2
