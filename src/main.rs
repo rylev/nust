@@ -10,11 +10,14 @@ enum Instruction {
     TransferXtoStackPointer,
 
     Jump(AddressMode),
+    JumpToSubRoutine(AddressMode),
     LoadAccum(AddressMode),
     StoreAccum(AddressMode),
     LoadX(AddressMode),
+    StoreX(AddressMode),
     BranchOnPlus(AddressMode),
-    BranchOnEqual(AddressMode)
+    BranchOnEqual(AddressMode),
+    Noop
 }
 
 #[derive(Debug)]
@@ -347,6 +350,11 @@ impl Cpu {
                 Instruction::LoadX(value)
             }
 
+            0x86 => {
+                let addr = self.zero_page();
+                Instruction::StoreX(addr)
+            }
+
             0x10 => {
                 let addr = self.relative_address();
                 Instruction::BranchOnPlus(addr)
@@ -358,6 +366,13 @@ impl Cpu {
             0xf0 => {
                 let addr = self.relative_address();
                 Instruction::BranchOnEqual(addr)
+            }
+            0x20 => {
+                let addr = self.absolute_address();
+                Instruction::JumpToSubRoutine(addr)
+            }
+            0xea => {
+                Instruction::Noop
             }
             _ => {
                 match 0xF & raw_instruction {
@@ -385,6 +400,11 @@ impl Cpu {
         AddressMode::Relative(offset)
     }
 
+    fn zero_page(&self) -> AddressMode {
+        let addr = self.interconnect.read_byte(self.pc + 1);
+        AddressMode::ZeroPage(addr)
+    }
+
     fn absolute_plus_x_address(&self) -> AddressMode {
         let addr_first = self.interconnect.read_byte(self.pc + 1) as u16;
         let addr_second = self.interconnect.read_byte(self.pc + 2) as u16;
@@ -398,6 +418,16 @@ impl Cpu {
             Instruction::Jump(addr) => {
                 match addr {
                     AddressMode::Absolute(addr) => addr,
+                    _ => panic!("Unrecognized jump addr {:?}", addr)
+
+                }
+            }
+            Instruction::JumpToSubRoutine(addr) => {
+                match addr {
+                    AddressMode::Absolute(addr) => {
+                        // TODO: store next instruction in stack
+                        addr
+                    },
                     _ => panic!("Unrecognized jump addr {:?}", addr)
 
                 }
@@ -451,6 +481,16 @@ impl Cpu {
                     _ => panic!("Unrecognized load x addr {:?}", addr)
                 }
             }
+            Instruction::StoreX(addr) => {
+                match addr {
+                    AddressMode::ZeroPage(addr) => {
+                        let value = self.x;
+                        self.interconnect.write_byte(addr as u16, value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized load x addr {:?}", addr)
+                }
+            }
             Instruction::TransferXtoStackPointer => {
                 self.status_reg.zero = self.x == 0;
                 self.status_reg.negative = (self.x & 0x1) == 1;
@@ -486,6 +526,9 @@ impl Cpu {
                     }
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
+            }
+            Instruction::Noop => {
+                self.pc + 1
             }
         }
     }
