@@ -223,18 +223,27 @@ struct Interconnect {
 }
 
 impl Interconnect {
-    fn new(rom: Vec<u8>) -> Interconnect {
+    fn new(mut rom: Vec<u8>) -> Interconnect {
+        // TODO: parse rom header and make decisions based on it
+        let pgr_rom = rom.split_off(0x10);
         Interconnect {
             ram: [0; 2 * 1024],
-            rom: rom,
+            rom: pgr_rom,
             ppu: PPU::new()
         }
     }
 
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            a if a < 0x7ff => self.ram[addr as usize],
-            a if a > 0x8000 => self.rom[(addr - 0x8000) as usize],
+            a if a < 0x7ff => {
+                self.ram[addr as usize]
+            }
+            a if a >= 0x8000 && a < 0xc000 => {
+                self.rom[(addr - 0x8000) as usize]
+            }
+            a if a >= 0xc000 => {
+                self.rom[(addr - 0xc000) as usize]
+            }
             a if a >= 0x2000 && a <= 0x2007 => {
                 println!("Reading from PPU at address: {:x}", a);
                 let offset = a - 0x2000;
@@ -282,7 +291,7 @@ impl Cpu {
     fn new(rom: Vec<u8>) -> Cpu {
         Cpu {
             interconnect: Interconnect::new(rom),
-            pc: (0x8000 + 0x10), // Roms starts at 0x8000 and the header is 0x10 bytes big
+            pc: 0x8000,
             accum: 0,
             x: 0,
             y: 0,
@@ -297,7 +306,7 @@ impl Cpu {
             let instruction = self.next_instruction();
             println!("Executing instruction: {:?}", instruction);
             self.pc = self.execute_instruction(instruction);
-            println!("Done\n\n");
+            println!("After: {:?}\n\n", self);
         }
     }
 
