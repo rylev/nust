@@ -532,7 +532,7 @@ impl Cpu {
                 };
 
                 self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value & 0x1) == 1;
+                self.status_reg.negative = (value >> 7) == 1;
                 self.accum = value;
                 self.pc + pc_offset
             }
@@ -622,7 +622,7 @@ impl Cpu {
                 match addr {
                     AddressMode::ZeroPage(addr) => {
                         let value = self.interconnect.read_byte(addr as u16);
-                        let andResult = ((value & self.accum) & 0b10000000) == 1;
+                        let andResult = ((value & self.accum) & 0b10000000) == 0;
                         self.status_reg.zero = andResult;
                         self.status_reg.negative = (value >> 7) == 1;
                         self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
