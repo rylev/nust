@@ -13,6 +13,8 @@ enum Instruction {
 
     Jump(AddressMode),
     JumpToSubRoutine(AddressMode),
+    ReturnFromSubRoutine,
+
     LoadAccum(AddressMode),
     StoreAccum(AddressMode),
     LoadX(AddressMode),
@@ -318,7 +320,11 @@ struct Cpu {
 }
 impl std::fmt::Debug for Cpu {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Cpu {{ pc: {:x}, accum: {}, x: {}, y: {}, stack_pointer: {}, status_reg: {:?} }}", self.pc, self.accum, self.x, self.y, self.stack_pointer, self.status_reg)
+        write!(
+            f,
+           "Cpu {{ pc: {:x}, accum: {:x}, x: {:x}, y: {:x}, stack_pointer: {:x}, status_reg: {:?} }}",
+           self.pc, self.accum, self.x, self.y, self.stack_pointer, self.status_reg
+        )
     }
 }
 
@@ -331,7 +337,7 @@ impl Cpu {
             x: 0,
             y: 0,
             status_reg: StatusReg::new(),
-            stack_pointer: 0
+            stack_pointer: 0xFD
         }
     }
 
@@ -441,6 +447,9 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnOverflowClear(addr)
             }
+            0x60 => {
+                Instruction::ReturnFromSubRoutine
+            }
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -480,6 +489,19 @@ impl Cpu {
         AddressMode::AbsolutePlusX(addr, x)
     }
 
+    // TODO: Consider always inlining
+    fn push_on_stack(&mut self, byte: u8) {
+        self.interconnect.write_byte((self.stack_pointer - 1) as u16, byte);
+        self.stack_pointer = self.stack_pointer - 1;
+    }
+
+    // TODO: Consider always inlining
+    fn pop_off_stack(&mut self) -> u8 {
+        let value = self.interconnect.read_byte(self.stack_pointer as u16);
+        self.stack_pointer = self.stack_pointer + 1;
+        value
+    }
+
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::Jump(addr) => {
@@ -492,12 +514,23 @@ impl Cpu {
             Instruction::JumpToSubRoutine(addr) => {
                 match addr {
                     AddressMode::Absolute(addr) => {
-                        // TODO: store next instruction in stack
+                        let next_instruction_addr = self.pc + 2;
+                        let next_instruction_addr_high_byte = ((next_instruction_addr & 0xFF00) >> 8) as u8;
+                        let next_instruction_addr_low_byte = (next_instruction_addr & 0xFF) as u8;
+                        self.push_on_stack(next_instruction_addr_high_byte);
+                        self.push_on_stack(next_instruction_addr_low_byte);
                         addr
                     },
                     _ => panic!("Unrecognized jump addr {:?}", addr)
 
                 }
+            }
+            Instruction::ReturnFromSubRoutine => {
+                let addr_low_byte = self.pop_off_stack() as u16;
+                let addr_high_byte = self.pop_off_stack() as u16;
+                let addr = (addr_high_byte << 8) | addr_low_byte;
+                self.stack_pointer = self.stack_pointer + 2;
+                addr + 1
             }
             Instruction::SetInterruptDisable => {
                 self.status_reg.interrupt = true;
