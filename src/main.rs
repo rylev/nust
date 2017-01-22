@@ -8,6 +8,7 @@ enum Instruction {
     ClearDecimal,
     SetCarry,
     ClearCarry,
+    SetDecimal,
 
     TransferXtoStackPointer,
 
@@ -19,6 +20,7 @@ enum Instruction {
     StoreAccum(AddressMode),
     LoadX(AddressMode),
     StoreX(AddressMode),
+
     BranchOnPlus(AddressMode),
     BranchOnEqual(AddressMode),
     BranchOnNotEqual(AddressMode),
@@ -26,7 +28,12 @@ enum Instruction {
     BranchOnCarryClear(AddressMode),
     BranchOnOverflow(AddressMode),
     BranchOnOverflowClear(AddressMode),
+
     BitTest(AddressMode),
+
+    PushProcessorStatus,
+    PullAccum,
+
     Noop
 }
 
@@ -450,6 +457,17 @@ impl Cpu {
             0x60 => {
                 Instruction::ReturnFromSubRoutine
             }
+
+            0xf8 => {
+                Instruction::SetDecimal
+            }
+            0x8 => {
+                Instruction::PushProcessorStatus
+            }
+            0x68 => {
+                Instruction::PullAccum
+            }
+
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -548,6 +566,10 @@ impl Cpu {
                 self.status_reg.carry = false;
                 self.pc + 1
             }
+            Instruction::SetDecimal => {
+                self.status_reg.decimal = true;
+                self.pc + 1
+            }
             Instruction::LoadAccum(addr) => {
                 let(value, pc_offset) = match addr {
                     AddressMode::Absolute(addr) => {
@@ -605,7 +627,7 @@ impl Cpu {
             }
             Instruction::TransferXtoStackPointer => {
                 self.status_reg.zero = self.x == 0;
-                self.status_reg.negative = (self.x & 0x1) == 1;
+                self.status_reg.negative = (self.x >> 7) == 1;
                 self.stack_pointer = self.x;
                 self.pc + 1
             }
@@ -663,6 +685,17 @@ impl Cpu {
                     }
                     _ => panic!("Unrecognized bit test addr {:?}", addr)
                 }
+            }
+            Instruction::PushProcessorStatus => {
+                let status = self.status_reg.as_byte();
+                self.push_on_stack(status);
+                self.pc + 1
+            }
+            Instruction::PullAccum => {
+                self.accum = self.pop_off_stack();
+                self.status_reg.zero = self.accum == 0;
+                self.status_reg.negative = (self.accum >> 7) == 1;
+                self.pc + 1
             }
             Instruction::Noop => {
                 self.pc + 1
