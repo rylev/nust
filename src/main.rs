@@ -22,6 +22,7 @@ enum Instruction {
     BranchOnNotEqual(AddressMode),
     BranchOnCarry(AddressMode),
     BranchOnCarryClear(AddressMode),
+    BranchOnOverflow(AddressMode),
     BitTest(AddressMode),
     Noop
 }
@@ -431,6 +432,10 @@ impl Cpu {
                 let addr = self.zero_page_address();
                 Instruction::BitTest(addr)
             }
+            0x70 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnOverflow(addr)
+            }
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -627,6 +632,18 @@ impl Cpu {
                             self.pc + 2
                         } else {
                             self.pc + 2 + (offset as u16)
+                        }
+                    }
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
+            Instruction::BranchOnOverflow(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        if self.status_reg.overflow {
+                            self.pc + 2 + (offset as u16)
+                        } else {
+                            self.pc + 2
                         }
                     }
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
