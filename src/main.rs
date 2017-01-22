@@ -23,6 +23,7 @@ enum Instruction {
     BranchOnCarry(AddressMode),
     BranchOnCarryClear(AddressMode),
     BranchOnOverflow(AddressMode),
+    BranchOnOverflowClear(AddressMode),
     BitTest(AddressMode),
     Noop
 }
@@ -436,6 +437,10 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnOverflow(addr)
             }
+            0x50 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnOverflowClear(addr)
+            }
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -573,79 +578,43 @@ impl Cpu {
             }
             Instruction::BranchOnPlus(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.negative {
-                            self.pc + 2
-                        } else {
-                            let negative = (0b1000_0000 & offset) == 1;
-                            let value = (offset & 0b01111111) as u16;
-                            if negative {
-                                self.pc + 2 - value
-                            } else {
-                                self.pc + 2 + value
-                            }
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(!self.status_reg.negative, offset),
                     _ => panic!("Unrecognized branch of plus addr {:?}", addr)
                 }
             }
             Instruction::BranchOnEqual(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.zero {
-                            self.pc + 2 + (offset as u16)
-                        } else {
-                            self.pc + 2
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(self.status_reg.zero, offset),
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
             Instruction::BranchOnNotEqual(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.zero {
-                            self.pc + 2
-                        } else {
-                            self.pc + 2 + (offset as u16)
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(!self.status_reg.zero, offset),
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
             Instruction::BranchOnCarry(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.carry {
-                            self.pc + 2 + (offset as u16)
-                        } else {
-                            self.pc + 2
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(self.status_reg.carry, offset),
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
             Instruction::BranchOnCarryClear(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.carry {
-                            self.pc + 2
-                        } else {
-                            self.pc + 2 + (offset as u16)
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(!self.status_reg.carry, offset),
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
             Instruction::BranchOnOverflow(addr) => {
                 match addr {
-                    AddressMode::Relative(offset) => {
-                        if self.status_reg.overflow {
-                            self.pc + 2 + (offset as u16)
-                        } else {
-                            self.pc + 2
-                        }
-                    }
+                    AddressMode::Relative(offset) => self.branch(self.status_reg.overflow, offset),
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
+            Instruction::BranchOnOverflowClear(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => self.branch(!self.status_reg.overflow, offset),
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
@@ -665,6 +634,20 @@ impl Cpu {
             Instruction::Noop => {
                 self.pc + 1
             }
+        }
+    }
+
+    fn branch(&self, branch_condition: bool, offset: u8) -> u16 {
+        if branch_condition {
+            let negative = (offset >> 7) == 1;
+            let value = (offset & 0b0111_1111) as u16;
+            if negative {
+                self.pc + 2 - value
+            } else {
+                self.pc + 2 + value
+            }
+        } else {
+            self.pc + 2
         }
     }
 }
