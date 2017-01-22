@@ -35,7 +35,9 @@ enum Instruction {
     Compare(AddressMode),
 
     PushProcessorStatus,
+    PullProcessorStatus,
     PullAccum,
+    PushAccum,
 
     Noop
 }
@@ -91,6 +93,15 @@ impl StatusReg {
         (if self.interrupt { 1 } else { 0 } << 2) |
         (if self.zero { 1 } else { 0 } << 1) |
         (if self.carry { 1 } else { 0 })
+    }
+
+    fn set_byte(&mut self, byte: u8) {
+        self.negative = byte >> 7 == 1;
+        self.overflow = ((byte >> 6) & 0b1) == 1;
+        self.decimal = ((byte >> 3) & 0b1) == 1;
+        self.interrupt = ((byte >> 2) & 0b1) == 1;
+        self.zero = ((byte >> 1) & 0b1) == 1;
+        self.carry = (byte & 0b1) == 1;
     }
 }
 
@@ -467,9 +478,16 @@ impl Cpu {
             0x8 => {
                 Instruction::PushProcessorStatus
             }
+            0x28 => {
+                Instruction::PullProcessorStatus
+            }
+            0x48 => {
+                Instruction::PushAccum
+            }
             0x68 => {
                 Instruction::PullAccum
             }
+
             0x29 => {
                 let value = self.immediate_value();
                 Instruction::And(value)
@@ -717,10 +735,20 @@ impl Cpu {
                 self.push_on_stack(status);
                 self.pc + 1
             }
+            Instruction::PullProcessorStatus => {
+                let status = self.pop_off_stack();
+                self.status_reg.set_byte(status);
+                self.pc + 1
+            }
             Instruction::PullAccum => {
                 self.accum = self.pop_off_stack();
                 self.status_reg.zero = self.accum == 0;
                 self.status_reg.negative = (self.accum >> 7) == 1;
+                self.pc + 1
+            }
+            Instruction::PushAccum => {
+                let accum = self.accum;
+                self.push_on_stack(accum);
                 self.pc + 1
             }
             Instruction::Noop => {
