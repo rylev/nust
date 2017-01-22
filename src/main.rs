@@ -22,6 +22,7 @@ enum Instruction {
     StoreX(AddressMode),
 
     BranchOnPlus(AddressMode),
+    BranchOnNegative(AddressMode),
     BranchOnEqual(AddressMode),
     BranchOnNotEqual(AddressMode),
     BranchOnCarry(AddressMode),
@@ -32,6 +33,7 @@ enum Instruction {
     BitTest(AddressMode),
 
     And(AddressMode),
+    Or(AddressMode),
     Compare(AddressMode),
 
     PushProcessorStatus,
@@ -376,22 +378,17 @@ impl Cpu {
         let raw_instruction = self.interconnect.read_byte(self.pc);
         println!("Raw instruction: {:x}", raw_instruction);
         match raw_instruction {
-            0x78 => {
-                Instruction::SetInterruptDisable
-            }
-            0xd8 => {
-                Instruction::ClearDecimal
-            }
             0x9a => {
                 Instruction::TransferXtoStackPointer
-            }
-            0x38 => {
-                Instruction::SetCarry
             }
             0x4c => {
                 let addr = self.absolute_address();
                 Instruction::Jump(addr)
             }
+            0x60 => {
+                Instruction::ReturnFromSubRoutine
+            }
+
 
             0xa9 => {
                 let value = self.immediate_value();
@@ -448,6 +445,36 @@ impl Cpu {
             0x18 => {
                 Instruction::ClearCarry
             }
+            0x78 => {
+                Instruction::SetInterruptDisable
+            }
+            0xd8 => {
+                Instruction::ClearDecimal
+            }
+            0x38 => {
+                Instruction::SetCarry
+            }
+            0xf8 => {
+                Instruction::SetDecimal
+            }
+
+            0x24 => {
+                let addr = self.zero_page_address();
+                Instruction::BitTest(addr)
+            }
+
+            0x30 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnNegative(addr)
+            }
+            0x50 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnOverflowClear(addr)
+            }
+            0x70 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnOverflow(addr)
+            }
             0x90 => {
                 let addr = self.relative_address();
                 Instruction::BranchOnCarryClear(addr)
@@ -456,25 +483,7 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnNotEqual(addr)
             }
-            0x24 => {
-                let addr = self.zero_page_address();
-                Instruction::BitTest(addr)
-            }
-            0x70 => {
-                let addr = self.relative_address();
-                Instruction::BranchOnOverflow(addr)
-            }
-            0x50 => {
-                let addr = self.relative_address();
-                Instruction::BranchOnOverflowClear(addr)
-            }
-            0x60 => {
-                Instruction::ReturnFromSubRoutine
-            }
 
-            0xf8 => {
-                Instruction::SetDecimal
-            }
             0x8 => {
                 Instruction::PushProcessorStatus
             }
@@ -491,6 +500,10 @@ impl Cpu {
             0x29 => {
                 let value = self.immediate_value();
                 Instruction::And(value)
+            }
+            0x09 => {
+                let value = self.immediate_value();
+                Instruction::Or(value)
             }
             0xc9 => {
                 let value = self.immediate_value();
@@ -659,6 +672,12 @@ impl Cpu {
                 self.stack_pointer = self.x;
                 self.pc + 1
             }
+            Instruction::BranchOnNegative(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => self.branch(self.status_reg.negative, offset),
+                    _ => panic!("Unrecognized branch of plus addr {:?}", addr)
+                }
+            }
             Instruction::BranchOnPlus(addr) => {
                 match addr {
                     AddressMode::Relative(offset) => self.branch(!self.status_reg.negative, offset),
@@ -721,6 +740,15 @@ impl Cpu {
                     _ => panic!("Unrecognized and addr {:?}", addr)
                 }
             }
+            Instruction::Or(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.or(value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized and addr {:?}", addr)
+                }
+            }
             Instruction::Compare(addr) => {
                 match addr {
                     AddressMode::Immediate(value) => {
@@ -758,15 +786,22 @@ impl Cpu {
     }
 
     fn compare(&mut self, value: u8) {
-        let subResult = self.accum.wrapping_sub(value);
-        let highest_bit = subResult >> 7;
-        self.status_reg.zero = highest_bit == 0;
-        self.status_reg.negative = highest_bit == 1;
+        let result = self.accum.wrapping_sub(value);
+        self.handle_result(result);
     }
 
     fn and(&mut self, value: u8) {
-        let andResult = value & self.accum;
-        let highest_bit = andResult >> 7;
+        let result = value & self.accum;
+        self.handle_result(result);
+    }
+
+    fn or(&mut self, value: u8) {
+        let result = value | self.accum;
+        self.handle_result(result);
+    }
+
+    fn handle_result(&mut self, result: u8) {
+        let highest_bit = result >> 7;
         self.status_reg.zero = highest_bit == 0;
         self.status_reg.negative = highest_bit == 1;
     }
