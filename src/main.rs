@@ -22,6 +22,7 @@ enum Instruction {
     BranchOnNotEqual(AddressMode),
     BranchOnCarry(AddressMode),
     BranchOnCarryClear(AddressMode),
+    BitTest(AddressMode),
     Noop
 }
 
@@ -347,6 +348,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::StoreAccum(addr)
             }
+            0x85 => {
+                let addr = self.zero_page_address();
+                Instruction::StoreAccum(addr)
+            }
 
             0xad => {
                 let addr = self.absolute_address();
@@ -359,7 +364,7 @@ impl Cpu {
             }
 
             0x86 => {
-                let addr = self.zero_page();
+                let addr = self.zero_page_address();
                 Instruction::StoreX(addr)
             }
 
@@ -398,6 +403,10 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnNotEqual(addr)
             }
+            0x24 => {
+                let addr = self.zero_page_address();
+                Instruction::BitTest(addr)
+            }
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -424,7 +433,7 @@ impl Cpu {
         AddressMode::Relative(offset)
     }
 
-    fn zero_page(&self) -> AddressMode {
+    fn zero_page_address(&self) -> AddressMode {
         let addr = self.interconnect.read_byte(self.pc + 1);
         AddressMode::ZeroPage(addr)
     }
@@ -498,6 +507,10 @@ impl Cpu {
                     AddressMode::Absolute(addr) => {
                         self.interconnect.write_byte(addr, self.accum);
                         self.pc + 3
+                    }
+                    AddressMode::ZeroPage(addr) => {
+                        self.interconnect.write_byte(addr as u16, self.accum);
+                        self.pc + 2
                     }
                     _ => panic!("Unrecognized store accum addr {:?}", addr)
                 }
@@ -593,6 +606,19 @@ impl Cpu {
                         }
                     }
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
+            Instruction::BitTest(addr) => {
+                match addr {
+                    AddressMode::ZeroPage(addr) => {
+                        let value = self.interconnect.read_byte(addr as u16);
+                        let andResult = ((value & self.accum) & 0b10000000) == 1;
+                        self.status_reg.zero = andResult;
+                        self.status_reg.negative = (value >> 7) == 1;
+                        self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized bit test addr {:?}", addr)
                 }
             }
             Instruction::Noop => {
