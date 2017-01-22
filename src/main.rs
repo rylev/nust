@@ -32,6 +32,7 @@ enum Instruction {
     BitTest(AddressMode),
 
     And(AddressMode),
+    Compare(AddressMode),
 
     PushProcessorStatus,
     PullAccum,
@@ -473,6 +474,10 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::And(value)
             }
+            0xc9 => {
+                let value = self.immediate_value();
+                Instruction::Compare(value)
+            }
 
             _ => {
                 match 0xF & raw_instruction {
@@ -699,6 +704,15 @@ impl Cpu {
                     _ => panic!("Unrecognized and addr {:?}", addr)
                 }
             }
+            Instruction::Compare(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.compare(value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized and addr {:?}", addr)
+                }
+            }
             Instruction::PushProcessorStatus => {
                 let status = self.status_reg.as_byte();
                 self.push_on_stack(status);
@@ -716,10 +730,18 @@ impl Cpu {
         }
     }
 
+    fn compare(&mut self, value: u8) {
+        let subResult = self.accum.wrapping_sub(value);
+        let highest_bit = subResult >> 7;
+        self.status_reg.zero = highest_bit == 0;
+        self.status_reg.negative = highest_bit == 1;
+    }
+
     fn and(&mut self, value: u8) {
-        let andResult = ((value & self.accum) & 0b10000000) == 0;
-        self.status_reg.zero = andResult;
-        self.status_reg.negative = (value >> 7) == 1;
+        let andResult = value & self.accum;
+        let highest_bit = andResult >> 7;
+        self.status_reg.zero = highest_bit == 0;
+        self.status_reg.negative = highest_bit == 1;
     }
 
     fn branch(&self, branch_condition: bool, offset: u8) -> u16 {
