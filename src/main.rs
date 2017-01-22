@@ -31,6 +31,8 @@ enum Instruction {
 
     BitTest(AddressMode),
 
+    And(AddressMode),
+
     PushProcessorStatus,
     PullAccum,
 
@@ -467,6 +469,10 @@ impl Cpu {
             0x68 => {
                 Instruction::PullAccum
             }
+            0x29 => {
+                let value = self.immediate_value();
+                Instruction::And(value)
+            }
 
             _ => {
                 match 0xF & raw_instruction {
@@ -684,6 +690,17 @@ impl Cpu {
                         self.pc + 2
                     }
                     _ => panic!("Unrecognized bit test addr {:?}", addr)
+                }
+            }
+            Instruction::And(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        let andResult = ((value & self.accum) & 0b10000000) == 0;
+                        self.status_reg.zero = andResult;
+                        self.status_reg.negative = (value >> 7) == 1;
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized and addr {:?}", addr)
                 }
             }
             Instruction::PushProcessorStatus => {
