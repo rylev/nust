@@ -7,6 +7,7 @@ enum Instruction {
     SetInterruptDisable,
     ClearDecimal,
     SetCarry,
+    ClearCarry,
 
     TransferXtoStackPointer,
 
@@ -18,7 +19,9 @@ enum Instruction {
     StoreX(AddressMode),
     BranchOnPlus(AddressMode),
     BranchOnEqual(AddressMode),
+    BranchOnNotEqual(AddressMode),
     BranchOnCarry(AddressMode),
+    BranchOnCarryClear(AddressMode),
     Noop
 }
 
@@ -384,6 +387,17 @@ impl Cpu {
             0xea => {
                 Instruction::Noop
             }
+            0x18 => {
+                Instruction::ClearCarry
+            }
+            0x90 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnCarryClear(addr)
+            }
+            0xd0 => {
+                let addr = self.relative_address();
+                Instruction::BranchOnNotEqual(addr)
+            }
             _ => {
                 match 0xF & raw_instruction {
                     0x3 | 0x7 | 0xB | 0xF => panic!("Instructions cannot have low half byte equal to 3, 7, B, or F: {:x}", raw_instruction),
@@ -452,6 +466,10 @@ impl Cpu {
             }
             Instruction::SetCarry => {
                 self.status_reg.carry = true;
+                self.pc + 1
+            }
+            Instruction::ClearCarry => {
+                self.status_reg.carry = false;
                 self.pc + 1
             }
             Instruction::LoadAccum(addr) => {
@@ -541,6 +559,18 @@ impl Cpu {
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
                 }
             }
+            Instruction::BranchOnNotEqual(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        if self.status_reg.zero {
+                            self.pc + 2
+                        } else {
+                            self.pc + 2 + (offset as u16)
+                        }
+                    }
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
             Instruction::BranchOnCarry(addr) => {
                 match addr {
                     AddressMode::Relative(offset) => {
@@ -548,6 +578,18 @@ impl Cpu {
                             self.pc + 2 + (offset as u16)
                         } else {
                             self.pc + 2
+                        }
+                    }
+                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
+                }
+            }
+            Instruction::BranchOnCarryClear(addr) => {
+                match addr {
+                    AddressMode::Relative(offset) => {
+                        if self.status_reg.carry {
+                            self.pc + 2
+                        } else {
+                            self.pc + 2 + (offset as u16)
                         }
                     }
                     _ => panic!("Unrecognized branch of equal addr {:?}", addr)
