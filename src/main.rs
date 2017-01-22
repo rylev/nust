@@ -558,7 +558,6 @@ impl Cpu {
                 let addr_low_byte = self.pop_off_stack() as u16;
                 let addr_high_byte = self.pop_off_stack() as u16;
                 let addr = (addr_high_byte << 8) | addr_low_byte;
-                self.stack_pointer = self.stack_pointer + 2;
                 addr + 1
             }
             Instruction::SetInterruptDisable => {
