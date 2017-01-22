@@ -58,14 +58,38 @@ enum AddressMode {
  * |            or D6 from last BIT
  * +--------- Negative: Set to bit 7 of the last operation
  */
-#[derive(Debug)]
 struct StatusReg {
-    carry: bool,
-    zero: bool,
-    interrupt: bool,
-    decimal: bool,
+    negative: bool,
     overflow: bool,
-    negative: bool
+    decimal: bool,
+    interrupt: bool,
+    zero: bool,
+    carry: bool
+}
+
+impl StatusReg {
+    fn as_byte(&self) -> u8 {
+        (if self.negative { 1 } else { 0 } << 7) |
+        (if self.overflow { 1 } else { 0 } << 6) |
+        (1 << 5) |
+        (0 << 4) |
+        (if self.decimal { 1 } else { 0 } << 3) |
+        (if self.interrupt { 1 } else { 0 } << 2) |
+        (if self.zero { 1 } else { 0 } << 1) |
+        (if self.carry { 1 } else { 0 })
+    }
+}
+
+impl std::fmt::Debug for StatusReg {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "StatusReg({:x})",
+            self.as_byte()
+            // "StatusReg {{ negative: {}, overflow: {}, decimal: {}, interrupt: {}, zero: {}, carry: {} }} ({:x})",
+            // self.negative, self.overflow, self.decimal, self.interrupt, self.zero, self.carry, self.as_byte()
+        )
+    }
 }
 
 impl StatusReg {
