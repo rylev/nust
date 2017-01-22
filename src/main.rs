@@ -8,6 +8,7 @@ enum Instruction {
     ClearDecimal,
     SetCarry,
     ClearCarry,
+    ClearOverflow,
     SetDecimal,
 
     TransferXtoStackPointer,
@@ -32,8 +33,10 @@ enum Instruction {
 
     BitTest(AddressMode),
 
+    AddWithCarry(AddressMode),
     And(AddressMode),
     Or(AddressMode),
+    ExclusiveOr(AddressMode),
     Compare(AddressMode),
 
     PushProcessorStatus,
@@ -448,6 +451,9 @@ impl Cpu {
             0x78 => {
                 Instruction::SetInterruptDisable
             }
+            0xb8 => {
+                Instruction::ClearOverflow
+            }
             0xd8 => {
                 Instruction::ClearDecimal
             }
@@ -501,9 +507,17 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::And(value)
             }
+            0x69 => {
+                let value = self.immediate_value();
+                Instruction::AddWithCarry(value)
+            }
             0x09 => {
                 let value = self.immediate_value();
                 Instruction::Or(value)
+            }
+            0x49 => {
+                let value = self.immediate_value();
+                Instruction::ExclusiveOr(value)
             }
             0xc9 => {
                 let value = self.immediate_value();
@@ -609,6 +623,10 @@ impl Cpu {
             }
             Instruction::SetDecimal => {
                 self.status_reg.decimal = true;
+                self.pc + 1
+            }
+            Instruction::ClearOverflow => {
+                self.status_reg.overflow = false;
                 self.pc + 1
             }
             Instruction::LoadAccum(addr) => {
@@ -731,6 +749,15 @@ impl Cpu {
                     _ => panic!("Unrecognized bit test addr {:?}", addr)
                 }
             }
+            Instruction::AddWithCarry(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.add_with_carry(value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized and addr {:?}", addr)
+                }
+            }
             Instruction::And(addr) => {
                 match addr {
                     AddressMode::Immediate(value) => {
@@ -744,6 +771,15 @@ impl Cpu {
                 match addr {
                     AddressMode::Immediate(value) => {
                         self.or(value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized and addr {:?}", addr)
+                }
+            }
+            Instruction::ExclusiveOr(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.exclusive_or(value);
                         self.pc + 2
                     }
                     _ => panic!("Unrecognized and addr {:?}", addr)
@@ -785,6 +821,15 @@ impl Cpu {
         }
     }
 
+    fn add_with_carry(&mut self, value: u8) {
+        // TODO: if self.status_reg.decimal {
+        let (result, did_overflow) = self.accum.overflowing_add(value);
+        self.status_reg.overflow = did_overflow;
+        // TODO: carry
+        self.handle_result(result)
+
+    }
+
     fn compare(&mut self, value: u8) {
         let result = self.accum.wrapping_sub(value);
         self.handle_result(result);
@@ -797,6 +842,10 @@ impl Cpu {
 
     fn or(&mut self, value: u8) {
         let result = value | self.accum;
+        self.handle_result(result);
+    }
+    fn exclusive_or(&mut self, value: u8) {
+        let result = value ^ self.accum;
         self.handle_result(result);
     }
 
