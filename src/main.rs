@@ -683,9 +683,7 @@ impl Cpu {
                 match addr {
                     AddressMode::ZeroPage(addr) => {
                         let value = self.interconnect.read_byte(addr as u16);
-                        let andResult = ((value & self.accum) & 0b10000000) == 0;
-                        self.status_reg.zero = andResult;
-                        self.status_reg.negative = (value >> 7) == 1;
+                        self.and(value);
                         self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
                         self.pc + 2
                     }
@@ -695,9 +693,7 @@ impl Cpu {
             Instruction::And(addr) => {
                 match addr {
                     AddressMode::Immediate(value) => {
-                        let andResult = ((value & self.accum) & 0b10000000) == 0;
-                        self.status_reg.zero = andResult;
-                        self.status_reg.negative = (value >> 7) == 1;
+                        self.and(value);
                         self.pc + 2
                     }
                     _ => panic!("Unrecognized and addr {:?}", addr)
@@ -718,6 +714,12 @@ impl Cpu {
                 self.pc + 1
             }
         }
+    }
+
+    fn and(&mut self, value: u8) {
+        let andResult = ((value & self.accum) & 0b10000000) == 0;
+        self.status_reg.zero = andResult;
+        self.status_reg.negative = (value >> 7) == 1;
     }
 
     fn branch(&self, branch_condition: bool, offset: u8) -> u16 {
