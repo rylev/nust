@@ -589,26 +589,16 @@ impl Cpu {
 
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
-            Instruction::Jump(addr) => {
-                match addr {
-                    AddressMode::Absolute(addr) => addr,
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
-
-                }
+            Instruction::Jump(AddressMode::Absolute(addr)) => {
+                addr
             }
-            Instruction::JumpToSubRoutine(addr) => {
-                match addr {
-                    AddressMode::Absolute(addr) => {
-                        let next_instruction_addr = self.pc + 2;
-                        let next_instruction_addr_high_byte = ((next_instruction_addr & 0xFF00) >> 8) as u8;
-                        let next_instruction_addr_low_byte = (next_instruction_addr & 0xFF) as u8;
-                        self.push_on_stack(next_instruction_addr_high_byte);
-                        self.push_on_stack(next_instruction_addr_low_byte);
-                        addr
-                    },
-                    _ => panic!("Unrecognized jump addr {:?}", addr)
-
-                }
+            Instruction::JumpToSubRoutine(AddressMode::Absolute(addr)) => {
+                let next_instruction_addr = self.pc + 2;
+                let next_instruction_addr_high_byte = ((next_instruction_addr & 0xFF00) >> 8) as u8;
+                let next_instruction_addr_low_byte = (next_instruction_addr & 0xFF) as u8;
+                self.push_on_stack(next_instruction_addr_high_byte);
+                self.push_on_stack(next_instruction_addr_low_byte);
+                addr
             }
             Instruction::ReturnFromSubRoutine => {
                 let addr_low_byte = self.pop_off_stack() as u16;
@@ -661,50 +651,30 @@ impl Cpu {
                 self.accum = value;
                 self.pc + pc_offset
             }
-            Instruction::StoreAccum(addr) => {
-                match addr {
-                    AddressMode::Absolute(addr) => {
-                        self.interconnect.write_byte(addr, self.accum);
-                        self.pc + 3
-                    }
-                    AddressMode::ZeroPage(addr) => {
-                        self.interconnect.write_byte(addr as u16, self.accum);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized store accum addr {:?}", addr)
-                }
+            Instruction::StoreAccum(AddressMode::Absolute(addr)) => {
+                self.interconnect.write_byte(addr, self.accum);
+                self.pc + 3
             }
-            Instruction::LoadX(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.status_reg.zero = value == 0;
-                        self.status_reg.negative = (value >> 7) == 1;
-                        self.x = value;
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized load x addr {:?}", addr)
-                }
+            Instruction::StoreAccum(AddressMode::ZeroPage(addr)) => {
+                self.interconnect.write_byte(addr as u16, self.accum);
+                self.pc + 2
             }
-            Instruction::LoadY(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.status_reg.zero = value == 0;
-                        self.status_reg.negative = (value >> 7) == 1;
-                        self.y = value;
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized load y addr {:?}", addr)
-                }
+            Instruction::LoadX(AddressMode::Immediate(value)) => {
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value >> 7) == 1;
+                self.x = value;
+                self.pc + 2
             }
-            Instruction::StoreX(addr) => {
-                match addr {
-                    AddressMode::ZeroPage(addr) => {
-                        let value = self.x;
-                        self.interconnect.write_byte(addr as u16, value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized load x addr {:?}", addr)
-                }
+            Instruction::LoadY(AddressMode::Immediate(value)) => {
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value >> 7) == 1;
+                self.y = value;
+                self.pc + 2
+            }
+            Instruction::StoreX(AddressMode::ZeroPage(addr)) => {
+                let value = self.x;
+                self.interconnect.write_byte(addr as u16, value);
+                self.pc + 2
             }
             Instruction::TransferXtoStackPointer => {
                 self.status_reg.zero = self.x == 0;
@@ -712,132 +682,68 @@ impl Cpu {
                 self.stack_pointer = self.x;
                 self.pc + 1
             }
-            Instruction::BranchOnNegative(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(self.status_reg.negative, offset),
-                    _ => panic!("Unrecognized branch of plus addr {:?}", addr)
-                }
+            Instruction::BranchOnNegative(AddressMode::Relative(offset)) => {
+                self.branch(self.status_reg.negative, offset)
             }
-            Instruction::BranchOnPlus(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(!self.status_reg.negative, offset),
-                    _ => panic!("Unrecognized branch of plus addr {:?}", addr)
-                }
+            Instruction::BranchOnPlus(AddressMode::Relative(offset)) => {
+                self.branch(!self.status_reg.negative, offset)
             }
-            Instruction::BranchOnEqual(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(self.status_reg.zero, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnEqual(AddressMode::Relative(offset)) => {
+                self.branch(self.status_reg.zero, offset)
             }
-            Instruction::BranchOnNotEqual(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(!self.status_reg.zero, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnNotEqual(AddressMode::Relative(offset)) => {
+                self.branch(!self.status_reg.zero, offset)
             }
-            Instruction::BranchOnCarry(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(self.status_reg.carry, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnCarry(AddressMode::Relative(offset)) => {
+                self.branch(self.status_reg.carry, offset)
             }
-            Instruction::BranchOnCarryClear(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(!self.status_reg.carry, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnCarryClear(AddressMode::Relative(offset)) => {
+                self.branch(!self.status_reg.carry, offset)
             }
-            Instruction::BranchOnOverflow(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(self.status_reg.overflow, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnOverflow(AddressMode::Relative(offset)) => {
+                self.branch(self.status_reg.overflow, offset)
             }
-            Instruction::BranchOnOverflowClear(addr) => {
-                match addr {
-                    AddressMode::Relative(offset) => self.branch(!self.status_reg.overflow, offset),
-                    _ => panic!("Unrecognized branch of equal addr {:?}", addr)
-                }
+            Instruction::BranchOnOverflowClear(AddressMode::Relative(offset)) => {
+                self.branch(!self.status_reg.overflow, offset)
             }
-            Instruction::BitTest(addr) => {
-                match addr {
-                    AddressMode::ZeroPage(addr) => {
-                        let value = self.interconnect.read_byte(addr as u16);
-                        self.status_reg.negative = (value >> 7) == 1;
-                        self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
-                        let result = value & self.accum;
-                        self.status_reg.zero = result == 0;
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized bit test addr {:?}", addr)
-                }
+            Instruction::BitTest(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.status_reg.negative = (value >> 7) == 1;
+                self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
+                let result = value & self.accum;
+                self.status_reg.zero = result == 0;
+                self.pc + 2
             }
-            Instruction::AddWithCarry(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.add_with_carry(value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized and addr {:?}", addr)
-                }
+            Instruction::AddWithCarry(AddressMode::Immediate(value)) => {
+                self.add_with_carry(value);
+                self.pc + 2
             }
-            Instruction::And(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.and(value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized and addr {:?}", addr)
-                }
+            Instruction::And(AddressMode::Immediate(value)) => {
+                self.and(value);
+                self.pc + 2
             }
-            Instruction::Or(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.or(value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized or addr {:?}", addr)
-                }
+            Instruction::Or(AddressMode::Immediate(value)) => {
+                self.or(value);
+                self.pc + 2
             }
-            Instruction::ExclusiveOr(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        self.exclusive_or(value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized xor addr {:?}", addr)
-                }
+            Instruction::ExclusiveOr(AddressMode::Immediate(value)) => {
+                self.exclusive_or(value);
+                self.pc + 2
             }
-            Instruction::Compare(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        let accum = self.accum;
-                        self.compare(accum, value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized compare addr {:?}", addr)
-                }
+            Instruction::Compare(AddressMode::Immediate(value)) => {
+                let accum = self.accum;
+                self.compare(accum, value);
+                self.pc + 2
             }
-            Instruction::CompareX(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        let x = self.x;
-                        self.compare(x, value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized compare x addr {:?}", addr)
-                }
+            Instruction::CompareX(AddressMode::Immediate(value)) => {
+                let x = self.x;
+                self.compare(x, value);
+                self.pc + 2
             }
-            Instruction::CompareY(addr) => {
-                match addr {
-                    AddressMode::Immediate(value) => {
-                        let y = self.y;
-                        self.compare(y, value);
-                        self.pc + 2
-                    }
-                    _ => panic!("Unrecognized compare y addr {:?}", addr)
-                }
+            Instruction::CompareY(AddressMode::Immediate(value)) => {
+                let y = self.y;
+                self.compare(y, value);
+                self.pc + 2
             }
             Instruction::PushProcessorStatus => {
                 let status = self.status_reg.as_byte();
@@ -863,6 +769,7 @@ impl Cpu {
             Instruction::Noop => {
                 self.pc + 1
             }
+            _ => panic!("Unrecognized instruction {:?}", instruction)
         }
     }
 
