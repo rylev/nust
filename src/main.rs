@@ -21,6 +21,7 @@ enum Instruction {
     StoreAccum(AddressMode),
     LoadX(AddressMode),
     StoreX(AddressMode),
+    LoadY(AddressMode),
 
     BranchOnPlus(AddressMode),
     BranchOnNegative(AddressMode),
@@ -38,6 +39,8 @@ enum Instruction {
     Or(AddressMode),
     ExclusiveOr(AddressMode),
     Compare(AddressMode),
+    CompareX(AddressMode),
+    CompareY(AddressMode),
 
     PushProcessorStatus,
     PullProcessorStatus,
@@ -308,7 +311,6 @@ impl Interconnect {
                 self.rom[(addr - 0xc000) as usize]
             }
             a if a >= 0x2000 && a <= 0x2007 => {
-                println!("Reading from PPU at address: {:x}", a);
                 let offset = a - 0x2000;
                 match offset {
                     0x2 => self.ppu.status,
@@ -323,7 +325,6 @@ impl Interconnect {
         match addr {
             a if a < 0x7ff => self.ram[addr as usize] = byte,
             a if a >= 0x2000 && a <= 0x2007 => {
-                println!("Writing to PPU at address: {:x}", a);
                 let offset = a - 0x2000;
                 match offset {
                     0x0 => self.ppu.ctrl = Ctrl::from_byte(byte),
@@ -348,8 +349,8 @@ impl std::fmt::Debug for Cpu {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-           "Cpu {{ pc: {:x}, accum: {:x}, x: {:x}, y: {:x}, stack_pointer: {:x}, status_reg: {:?} }}",
-           self.pc, self.accum, self.x, self.y, self.stack_pointer, self.status_reg
+           "A: {:x}, X: {:x}, Y: {:x}, P: {:x}, SP: {:x}",
+           self.accum, self.x, self.y, self.status_reg.as_byte(), self.stack_pointer
         )
     }
 }
@@ -369,17 +370,15 @@ impl Cpu {
 
     fn run(&mut self) {
         loop {
-            println!("Before: {:?}", self);
+            let raw_instruction = self.interconnect.read_byte(self.pc);
             let instruction = self.next_instruction();
-            println!("Executing instruction: {:?}", instruction);
+            println!("{:x} {:x} {:?}", self.pc, raw_instruction, self);
             self.pc = self.execute_instruction(instruction);
-            println!("After: {:?}\n\n", self);
         }
     }
 
     fn next_instruction(&mut self) -> Instruction {
         let raw_instruction = self.interconnect.read_byte(self.pc);
-        println!("Raw instruction: {:x}", raw_instruction);
         match raw_instruction {
             0x9a => {
                 Instruction::TransferXtoStackPointer
@@ -411,6 +410,10 @@ impl Cpu {
                 Instruction::LoadAccum(addr)
             }
 
+            0xa0 => {
+                let value = self.immediate_value();
+                Instruction::LoadY(value)
+            }
             0xa2 => {
                 let value = self.immediate_value();
                 Instruction::LoadX(value)
@@ -518,6 +521,14 @@ impl Cpu {
             0x49 => {
                 let value = self.immediate_value();
                 Instruction::ExclusiveOr(value)
+            }
+            0xc0 => {
+                let value = self.immediate_value();
+                Instruction::CompareY(value)
+            }
+            0xe0 => {
+                let value = self.immediate_value();
+                Instruction::CompareX(value)
             }
             0xc9 => {
                 let value = self.immediate_value();
@@ -667,11 +678,22 @@ impl Cpu {
                 match addr {
                     AddressMode::Immediate(value) => {
                         self.status_reg.zero = value == 0;
-                        self.status_reg.negative = (value & 0x1) == 1;
+                        self.status_reg.negative = (value >> 7) == 1;
                         self.x = value;
                         self.pc + 2
                     }
                     _ => panic!("Unrecognized load x addr {:?}", addr)
+                }
+            }
+            Instruction::LoadY(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        self.status_reg.zero = value == 0;
+                        self.status_reg.negative = (value >> 7) == 1;
+                        self.y = value;
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized load y addr {:?}", addr)
                 }
             }
             Instruction::StoreX(addr) => {
@@ -775,7 +797,7 @@ impl Cpu {
                         self.or(value);
                         self.pc + 2
                     }
-                    _ => panic!("Unrecognized and addr {:?}", addr)
+                    _ => panic!("Unrecognized or addr {:?}", addr)
                 }
             }
             Instruction::ExclusiveOr(addr) => {
@@ -784,16 +806,37 @@ impl Cpu {
                         self.exclusive_or(value);
                         self.pc + 2
                     }
-                    _ => panic!("Unrecognized and addr {:?}", addr)
+                    _ => panic!("Unrecognized xor addr {:?}", addr)
                 }
             }
             Instruction::Compare(addr) => {
                 match addr {
                     AddressMode::Immediate(value) => {
-                        self.compare(value);
+                        let accum = self.accum;
+                        self.compare(accum, value);
                         self.pc + 2
                     }
-                    _ => panic!("Unrecognized and addr {:?}", addr)
+                    _ => panic!("Unrecognized compare addr {:?}", addr)
+                }
+            }
+            Instruction::CompareX(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        let x = self.x;
+                        self.compare(x, value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized compare x addr {:?}", addr)
+                }
+            }
+            Instruction::CompareY(addr) => {
+                match addr {
+                    AddressMode::Immediate(value) => {
+                        let y = self.y;
+                        self.compare(y, value);
+                        self.pc + 2
+                    }
+                    _ => panic!("Unrecognized compare y addr {:?}", addr)
                 }
             }
             Instruction::PushProcessorStatus => {
@@ -840,10 +883,10 @@ impl Cpu {
         self.status_reg.negative = result_high_bit == 1;
     }
 
-    fn compare(&mut self, value: u8) {
-        let result = self.accum.wrapping_sub(value);
-        self.status_reg.carry = self.accum >= value;
-        self.status_reg.zero = self.accum == value;
+    fn compare(&mut self, stored_value: u8, value: u8) {
+        let result = stored_value.wrapping_sub(value);
+        self.status_reg.carry = stored_value >= value;
+        self.status_reg.zero = stored_value == value;
         let highest_bit = result >> 7;
         self.status_reg.negative = highest_bit == 1;
     }
