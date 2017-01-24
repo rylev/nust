@@ -742,8 +742,10 @@ impl Cpu {
                 match addr {
                     AddressMode::ZeroPage(addr) => {
                         let value = self.interconnect.read_byte(addr as u16);
-                        self.and(value);
+                        self.status_reg.negative = (value >> 7) == 1;
                         self.status_reg.overflow = ((value >> 6) & 0b1) == 1;
+                        let result = value & self.accum;
+                        self.status_reg.zero = result == 0;
                         self.pc + 2
                     }
                     _ => panic!("Unrecognized bit test addr {:?}", addr)
@@ -822,17 +824,28 @@ impl Cpu {
     }
 
     fn add_with_carry(&mut self, value: u8) {
-        // TODO: if self.status_reg.decimal {
-        let (result, did_overflow) = self.accum.overflowing_add(value);
-        self.status_reg.overflow = did_overflow;
-        // TODO: carry
-        self.handle_result(result)
-
+        let (mut result, did_overflow1) = self.accum.overflowing_add(value);
+        let (mut result, did_overflow2) = result.overflowing_add(if self.status_reg.carry { 1 } else { 0 });
+        if self.status_reg.decimal {
+            println!("WRONG");
+            //TODO: this is wrong
+        }
+        let accum_high_bit = self.accum >> 7;
+        let value_high_bit = value >> 7;
+        let result_high_bit = result >> 7;
+        self.accum = result;
+        self.status_reg.overflow = (accum_high_bit == value_high_bit) && (result_high_bit != accum_high_bit);
+        self.status_reg.carry = did_overflow1 || did_overflow2;
+        self.status_reg.zero = result == 0;
+        self.status_reg.negative = result_high_bit == 1;
     }
 
     fn compare(&mut self, value: u8) {
         let result = self.accum.wrapping_sub(value);
-        self.handle_result(result);
+        self.status_reg.carry = self.accum >= value;
+        self.status_reg.zero = self.accum == value;
+        let highest_bit = result >> 7;
+        self.status_reg.negative = highest_bit == 1;
     }
 
     fn and(&mut self, value: u8) {
@@ -844,12 +857,14 @@ impl Cpu {
         let result = value | self.accum;
         self.handle_result(result);
     }
+
     fn exclusive_or(&mut self, value: u8) {
         let result = value ^ self.accum;
         self.handle_result(result);
     }
 
     fn handle_result(&mut self, result: u8) {
+        self.accum = result;
         let highest_bit = result >> 7;
         self.status_reg.zero = highest_bit == 0;
         self.status_reg.negative = highest_bit == 1;
