@@ -7,7 +7,6 @@ pub enum Instruction {
     ClearOverflow,
     SetDecimal,
 
-    TransferXtoStackPointer,
 
     Jump(AddressMode),
     JumpToSubRoutine(AddressMode),
@@ -38,6 +37,8 @@ pub enum Instruction {
     TransferXToAccum,
     TransferAccumToY,
     TransferYToAccum,
+    TransferXtoStackPointer,
+    TransferStackPointerToX,
     AddWithCarry(AddressMode),
     SubtractWithCarry(AddressMode),
     And(AddressMode),

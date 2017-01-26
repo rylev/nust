@@ -19,7 +19,7 @@ impl Interconnect {
 
     pub fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            a if a < 0x7ff => {
+            a if a <= 0x7ff => {
                 self.ram[addr as usize]
             }
             a if a >= 0x8000 && a < 0xc000 => {
@@ -41,7 +41,7 @@ impl Interconnect {
 
     pub fn write_byte(&mut self, addr: u16, byte: u8) {
         match addr {
-            a if a < 0x7ff => self.ram[addr as usize] = byte,
+            a if a <= 0x7ff => self.ram[addr as usize] = byte,
             a if a >= 0x2000 && a <= 0x2007 => {
                 let offset = a - 0x2000;
                 match offset {

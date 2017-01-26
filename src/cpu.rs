@@ -52,6 +52,9 @@ impl Cpu {
             0x9a => {
                 Instruction::TransferXtoStackPointer
             }
+            0xba => {
+                Instruction::TransferStackPointerToX
+            }
             0x4c => {
                 let addr = self.absolute_address();
                 Instruction::Jump(addr)
@@ -88,6 +91,10 @@ impl Cpu {
                 Instruction::LoadX(value)
             }
 
+            0x8e => {
+                let addr = self.absolute_address();
+                Instruction::StoreX(addr)
+            }
             0x86 => {
                 let addr = self.zero_page_address();
                 Instruction::StoreX(addr)
@@ -360,11 +367,10 @@ impl Cpu {
                 self.interconnect.write_byte(addr as u16, value);
                 self.pc + 2
             }
-            Instruction::TransferXtoStackPointer => {
-                self.status_reg.zero = self.x == 0;
-                self.status_reg.negative = (self.x >> 7) == 1;
-                self.stack_pointer = self.x;
-                self.pc + 1
+            Instruction::StoreX(AddressMode::Absolute(addr)) => {
+                let value = self.x;
+                self.interconnect.write_byte(addr, value);
+                self.pc + 3
             }
             Instruction::BranchOnNegative(AddressMode::Relative(offset)) => {
                 self.branch(self.status_reg.negative, offset)
@@ -420,6 +426,18 @@ impl Cpu {
             }
             Instruction::DecrementY => {
                 self.y = self.y.wrapping_sub(1);
+                self.pc + 1
+            }
+            Instruction::TransferStackPointerToX => {
+                let result = self.stack_pointer;
+                self.x = result;
+                self.handle_transfer(result);
+                self.pc + 1
+            }
+            Instruction::TransferXtoStackPointer => {
+                let result = self.x;
+                self.stack_pointer = result;
+                // No flags are set on this operation
                 self.pc + 1
             }
             Instruction::TransferXToAccum => {
