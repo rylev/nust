@@ -30,7 +30,9 @@ pub enum Instruction {
 
     BitTest(AddressMode),
 
+    IncrementY,
     AddWithCarry(AddressMode),
+    SubtractWithCarry(AddressMode),
     And(AddressMode),
     Or(AddressMode),
     ExclusiveOr(AddressMode),

@@ -175,13 +175,20 @@ impl Cpu {
                 Instruction::PullAccum
             }
 
-            0x29 => {
-                let value = self.immediate_value();
-                Instruction::And(value)
-            }
             0x69 => {
                 let value = self.immediate_value();
                 Instruction::AddWithCarry(value)
+            }
+            0xe9 => {
+                let value = self.immediate_value();
+                Instruction::SubtractWithCarry(value)
+            }
+            0xc8 => {
+                Instruction::IncrementY
+            }
+            0x29 => {
+                let value = self.immediate_value();
+                Instruction::And(value)
             }
             0x09 => {
                 let value = self.immediate_value();
@@ -374,6 +381,14 @@ impl Cpu {
                 self.add_with_carry(value);
                 self.pc + 2
             }
+            Instruction::SubtractWithCarry(AddressMode::Immediate(value)) => {
+                self.subtract_with_carry(value);
+                self.pc + 2
+            }
+            Instruction::IncrementY => {
+                self.y = self.y + 1;
+                self.pc + 1
+            }
             Instruction::And(AddressMode::Immediate(value)) => {
                 self.and(value);
                 self.pc + 2
@@ -444,6 +459,10 @@ impl Cpu {
         self.status_reg.carry = did_overflow1 || did_overflow2;
         self.status_reg.zero = result == 0;
         self.status_reg.negative = result_high_bit == 1;
+    }
+
+    fn subtract_with_carry(&mut self, value: u8) {
+        self.add_with_carry(!value)
     }
 
     fn compare(&mut self, stored_value: u8, value: u8) {
