@@ -90,6 +90,10 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::LoadX(value)
             }
+            0xae => {
+                let addr = self.absolute_address();
+                Instruction::LoadX(addr)
+            }
 
             0x8e => {
                 let addr = self.absolute_address();
