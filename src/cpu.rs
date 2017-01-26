@@ -183,8 +183,29 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::SubtractWithCarry(value)
             }
+            0xe8 => {
+                Instruction::IncrementX
+            }
             0xc8 => {
                 Instruction::IncrementY
+            }
+            0xca => {
+                Instruction::DecrementX
+            }
+            0x88 => {
+                Instruction::DecrementY
+            }
+            0xaa => {
+                Instruction::TransferAccumToX
+            }
+            0x8a => {
+                Instruction::TransferXToAccum
+            }
+            0xa8 => {
+                Instruction::TransferAccumToY
+            }
+            0x98 => {
+                Instruction::TransferYToAccum
             }
             0x29 => {
                 let value = self.immediate_value();
@@ -385,8 +406,44 @@ impl Cpu {
                 self.subtract_with_carry(value);
                 self.pc + 2
             }
+            Instruction::IncrementX => {
+                self.x = self.x.wrapping_add(1);
+                self.pc + 1
+            }
             Instruction::IncrementY => {
-                self.y = self.y + 1;
+                self.y = self.y.wrapping_add(1);
+                self.pc + 1
+            }
+            Instruction::DecrementX => {
+                self.x = self.x.wrapping_sub(1);
+                self.pc + 1
+            }
+            Instruction::DecrementY => {
+                self.y = self.y.wrapping_sub(1);
+                self.pc + 1
+            }
+            Instruction::TransferXToAccum => {
+                let result = self.x;
+                self.accum = result;
+                self.handle_transfer(result);
+                self.pc + 1
+            }
+            Instruction::TransferAccumToX => {
+                let result = self.accum;
+                self.x = result;
+                self.handle_transfer(result);
+                self.pc + 1
+            }
+            Instruction::TransferYToAccum => {
+                let result = self.y;
+                self.accum = result;
+                self.handle_transfer(result);
+                self.pc + 1
+            }
+            Instruction::TransferAccumToY => {
+                let result = self.accum;
+                self.y = result;
+                self.handle_transfer(result);
                 self.pc + 1
             }
             Instruction::And(AddressMode::Immediate(value)) => {
@@ -507,6 +564,12 @@ impl Cpu {
         } else {
             self.pc + 2
         }
+    }
+
+    fn handle_transfer(&mut self, result: u8) {
+        let highest_bit = result >> 7;
+        self.status_reg.zero = result == 0;
+        self.status_reg.negative = highest_bit == 1;
     }
 
     // TODO: Consider always inlining

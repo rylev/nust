@@ -30,7 +30,14 @@ pub enum Instruction {
 
     BitTest(AddressMode),
 
+    IncrementX,
     IncrementY,
+    DecrementX,
+    DecrementY,
+    TransferAccumToX,
+    TransferXToAccum,
+    TransferAccumToY,
+    TransferYToAccum,
     AddWithCarry(AddressMode),
     SubtractWithCarry(AddressMode),
     And(AddressMode),
