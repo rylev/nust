@@ -68,6 +68,22 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::LoadAccum(value)
             }
+            0xad => {
+                let addr = self.absolute_address();
+                Instruction::LoadAccum(addr)
+            }
+            0xa5 => {
+                let addr = self.zero_page_address();
+                Instruction::LoadAccum(addr)
+            }
+            0xbd => {
+                let addr = self.absolute_plus_x_address();
+                Instruction::LoadAccum(addr)
+            }
+            0xa1 => {
+                let addr = self.indirect_x_address();
+                Instruction::LoadAccum(addr)
+            }
             0x8d => {
                 let addr = self.absolute_address();
                 Instruction::StoreAccum(addr)
@@ -77,10 +93,6 @@ impl Cpu {
                 Instruction::StoreAccum(addr)
             }
 
-            0xad => {
-                let addr = self.absolute_address();
-                Instruction::LoadAccum(addr)
-            }
 
             0xa0 => {
                 let value = self.immediate_value();
@@ -107,10 +119,6 @@ impl Cpu {
             0x10 => {
                 let addr = self.relative_address();
                 Instruction::BranchOnPlus(addr)
-            }
-            0xbd => {
-                let addr = self.absolute_plus_x_address();
-                Instruction::LoadAccum(addr)
             }
             0xf0 => {
                 let addr = self.relative_address();
@@ -298,6 +306,19 @@ impl Cpu {
         AddressMode::AbsolutePlusX(addr, x)
     }
 
+    fn indirect_x_address(&self) -> AddressMode {
+        let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16) ;
+        let addr_addr_second = addr_addr_first.wrapping_add(1);
+
+        println!("\n{:x}", addr_addr_first);
+        let addr_first = self.interconnect.read_byte(addr_addr_first.wrapping_add(self.x) as u16) as u16;
+        let addr_second = self.interconnect.read_byte(addr_addr_second.wrapping_add(self.x) as u16) as u16;
+        let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+        println!("\n{:x} {:x}", addr_first, addr_second);
+
+        AddressMode::IndirectX(addr)
+    }
+
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::Jump(AddressMode::Absolute(addr)) => {
@@ -347,12 +368,21 @@ impl Cpu {
                         let value = self.interconnect.read_byte(addr);
                         (value, 3)
                     }
+                    AddressMode::IndirectX(addr) => {
+                        println!("\n{:x}\n", addr);
+                        let value = self.interconnect.read_byte(addr);
+                        (value, 2)
+                    }
                     AddressMode::Immediate(value) => {
                         (value, 2)
                     }
                     AddressMode::AbsolutePlusX(addr, offset) => {
                         let value = self.interconnect.read_byte(addr + offset as u16);
                         (value, 3)
+                    }
+                    AddressMode::ZeroPage(addr) => {
+                        let value = self.interconnect.read_byte(addr as u16);
+                        (value, 2)
                     }
                     _ => panic!("Unrecognized load accum addr {:?}", addr)
                 };

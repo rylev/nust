@@ -73,7 +73,7 @@ pub enum AddressMode {
     Immediate(u8),
     Relative(u8),
     Indirect(u16),
-    IndirectX(u8),
-    IndirectY(u8),
+    IndirectX(u16),
+    IndirectY(u16),
     Accumulator
 }
