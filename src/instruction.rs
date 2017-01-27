@@ -18,6 +18,7 @@ pub enum Instruction {
     LoadX(AddressMode),
     StoreX(AddressMode),
     LoadY(AddressMode),
+    StoreY(AddressMode),
 
     BranchOnPlus(AddressMode),
     BranchOnNegative(AddressMode),

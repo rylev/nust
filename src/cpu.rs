@@ -84,6 +84,10 @@ impl Cpu {
                 let addr = self.indirect_x_address();
                 Instruction::LoadAccum(addr)
             }
+            0x81 => {
+                let addr = self.indirect_x_address();
+                Instruction::StoreAccum(addr)
+            }
             0x8d => {
                 let addr = self.absolute_address();
                 Instruction::StoreAccum(addr)
@@ -98,9 +102,17 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::LoadY(value)
             }
+            0xa4 => {
+                let addr = self.zero_page_address();
+                Instruction::LoadY(addr)
+            }
             0xa2 => {
                 let value = self.immediate_value();
                 Instruction::LoadX(value)
+            }
+            0xa6 => {
+                let addr = self.zero_page_address();
+                Instruction::LoadX(addr)
             }
             0xae => {
                 let addr = self.absolute_address();
@@ -114,6 +126,11 @@ impl Cpu {
             0x86 => {
                 let addr = self.zero_page_address();
                 Instruction::StoreX(addr)
+            }
+
+            0x84 => {
+                let addr = self.zero_page_address();
+                Instruction::StoreY(addr)
             }
 
             0x10 => {
@@ -194,9 +211,17 @@ impl Cpu {
                 Instruction::PullAccum
             }
 
+            0x61 => {
+                let addr = self.indirect_x_address();
+                Instruction::AddWithCarry(addr)
+            }
             0x69 => {
                 let value = self.immediate_value();
                 Instruction::AddWithCarry(value)
+            }
+            0xe1 => {
+                let addr = self.indirect_x_address();
+                Instruction::SubtractWithCarry(addr)
             }
             0xe9 => {
                 let value = self.immediate_value();
@@ -242,9 +267,21 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::And(value)
             }
+            0x21 => {
+                let addr = self.indirect_x_address();
+                Instruction::And(addr)
+            }
+            0x01 => {
+                let addr = self.indirect_x_address();
+                Instruction::Or(addr)
+            }
             0x09 => {
                 let value = self.immediate_value();
                 Instruction::Or(value)
+            }
+            0x41 => {
+                let addr = self.indirect_x_address();
+                Instruction::ExclusiveOr(addr)
             }
             0x49 => {
                 let value = self.immediate_value();
@@ -257,6 +294,10 @@ impl Cpu {
             0xe0 => {
                 let value = self.immediate_value();
                 Instruction::CompareX(value)
+            }
+            0xc1 => {
+                let addr = self.indirect_x_address();
+                Instruction::Compare(addr)
             }
             0xc9 => {
                 let value = self.immediate_value();
@@ -307,14 +348,20 @@ impl Cpu {
     }
 
     fn indirect_x_address(&self) -> AddressMode {
+        self.indirect_with_offset(self.x)
+    }
+
+    fn indirect_y_address(&self) -> AddressMode {
+        self.indirect_with_offset(self.y)
+    }
+
+    fn indirect_with_offset(&self, offset: u8) -> AddressMode {
         let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16) ;
         let addr_addr_second = addr_addr_first.wrapping_add(1);
 
-        println!("\n{:x}", addr_addr_first);
-        let addr_first = self.interconnect.read_byte(addr_addr_first.wrapping_add(self.x) as u16) as u16;
-        let addr_second = self.interconnect.read_byte(addr_addr_second.wrapping_add(self.x) as u16) as u16;
+        let addr_first = self.interconnect.read_byte(addr_addr_first.wrapping_add(offset) as u16) as u16;
+        let addr_second = self.interconnect.read_byte(addr_addr_second.wrapping_add(offset) as u16) as u16;
         let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
-        println!("\n{:x} {:x}", addr_first, addr_second);
 
         AddressMode::IndirectX(addr)
     }
@@ -369,7 +416,6 @@ impl Cpu {
                         (value, 3)
                     }
                     AddressMode::IndirectX(addr) => {
-                        println!("\n{:x}\n", addr);
                         let value = self.interconnect.read_byte(addr);
                         (value, 2)
                     }
@@ -400,6 +446,10 @@ impl Cpu {
                 self.interconnect.write_byte(addr as u16, self.accum);
                 self.pc + 2
             }
+            Instruction::StoreAccum(AddressMode::IndirectX(addr)) => {
+                self.interconnect.write_byte(addr, self.accum);
+                self.pc + 2
+            }
             Instruction::LoadX(AddressMode::Immediate(value)) => {
                 self.status_reg.zero = value == 0;
                 self.status_reg.negative = (value >> 7) == 1;
@@ -413,7 +463,21 @@ impl Cpu {
                 self.x = value;
                 self.pc + 3
             }
+            Instruction::LoadX(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value >> 7) == 1;
+                self.x = value;
+                self.pc + 2
+            }
             Instruction::LoadY(AddressMode::Immediate(value)) => {
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value >> 7) == 1;
+                self.y = value;
+                self.pc + 2
+            }
+            Instruction::LoadY(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
                 self.status_reg.zero = value == 0;
                 self.status_reg.negative = (value >> 7) == 1;
                 self.y = value;
@@ -428,6 +492,11 @@ impl Cpu {
                 let value = self.x;
                 self.interconnect.write_byte(addr, value);
                 self.pc + 3
+            }
+            Instruction::StoreY(AddressMode::ZeroPage(addr)) => {
+                let value = self.y;
+                self.interconnect.write_byte(addr as u16, value);
+                self.pc + 2
             }
             Instruction::BranchOnNegative(AddressMode::Relative(offset)) => {
                 self.branch(self.status_reg.negative, offset)
@@ -461,8 +530,18 @@ impl Cpu {
                 self.status_reg.zero = result == 0;
                 self.pc + 2
             }
+            Instruction::AddWithCarry(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.add_with_carry(value);
+                self.pc + 2
+            }
             Instruction::AddWithCarry(AddressMode::Immediate(value)) => {
                 self.add_with_carry(value);
+                self.pc + 2
+            }
+            Instruction::SubtractWithCarry(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.subtract_with_carry(value);
                 self.pc + 2
             }
             Instruction::SubtractWithCarry(AddressMode::Immediate(value)) => {
@@ -563,12 +642,33 @@ impl Cpu {
                 self.and(value);
                 self.pc + 2
             }
+            Instruction::And(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.and(value);
+                self.pc + 2
+            }
             Instruction::Or(AddressMode::Immediate(value)) => {
                 self.or(value);
                 self.pc + 2
             }
+            Instruction::Or(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.or(value);
+                self.pc + 2
+            }
+            Instruction::ExclusiveOr(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.exclusive_or(value);
+                self.pc + 2
+            }
             Instruction::ExclusiveOr(AddressMode::Immediate(value)) => {
                 self.exclusive_or(value);
+                self.pc + 2
+            }
+            Instruction::Compare(AddressMode::IndirectX(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                let accum = self.accum;
+                self.compare(accum, value);
                 self.pc + 2
             }
             Instruction::Compare(AddressMode::Immediate(value)) => {
