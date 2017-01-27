@@ -194,6 +194,18 @@ impl Cpu {
                 let value = self.immediate_value();
                 Instruction::SubtractWithCarry(value)
             }
+            0x4a => {
+                Instruction::LogicalShiftRight(AddressMode::Accumulator)
+            }
+            0x0a => {
+                Instruction::ArithmeticShiftLeft(AddressMode::Accumulator)
+            }
+            0x6a => {
+                Instruction::RotateRight(AddressMode::Accumulator)
+            }
+            0x2a => {
+                Instruction::RotateLeft(AddressMode::Accumulator)
+            }
             0xe8 => {
                 Instruction::IncrementX
             }
@@ -241,6 +253,10 @@ impl Cpu {
             0xc9 => {
                 let value = self.immediate_value();
                 Instruction::Compare(value)
+            }
+
+            0x40 => {
+                Instruction::ReturnFromInterrupt
             }
 
             _ => {
@@ -360,6 +376,13 @@ impl Cpu {
                 self.x = value;
                 self.pc + 2
             }
+            Instruction::LoadX(AddressMode::Absolute(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.status_reg.zero = value == 0;
+                self.status_reg.negative = (value >> 7) == 1;
+                self.x = value;
+                self.pc + 3
+            }
             Instruction::LoadY(AddressMode::Immediate(value)) => {
                 self.status_reg.zero = value == 0;
                 self.status_reg.negative = (value >> 7) == 1;
@@ -415,6 +438,44 @@ impl Cpu {
             Instruction::SubtractWithCarry(AddressMode::Immediate(value)) => {
                 self.subtract_with_carry(value);
                 self.pc + 2
+            }
+            Instruction::LogicalShiftRight(AddressMode::Accumulator) => {
+                let lowest_bit = self.accum & 0b1;
+                let result = self.accum >> 1;
+                self.accum = result;
+                self.status_reg.carry = lowest_bit == 1;
+                self.status_reg.zero = result == 0;
+                self.status_reg.negative = result >> 7 == 1;
+                self.pc + 1
+            }
+            Instruction::ArithmeticShiftLeft(AddressMode::Accumulator) => {
+                let highest_bit = self.accum >> 7;
+                let result = self.accum << 1;
+                self.accum = result;
+                self.status_reg.carry = highest_bit == 1;
+                self.status_reg.zero = result == 0;
+                self.status_reg.negative = result >> 7 == 1;
+                self.pc + 1
+            }
+            Instruction::RotateRight(AddressMode::Accumulator) => {
+                let lowest_bit = self.accum & 0b1;
+                let carry_bit = if self.status_reg.carry { 1 } else { 0 };
+                let result = (self.accum >> 1) | (carry_bit << 7);
+                self.accum = result;
+                self.status_reg.carry = lowest_bit == 1;
+                self.status_reg.zero = result == 0;
+                self.status_reg.negative = result >> 7 == 1;
+                self.pc + 1
+            }
+            Instruction::RotateLeft(AddressMode::Accumulator) => {
+                let high_bit = self.accum >> 7;
+                let carry_bit = if self.status_reg.carry { 1 } else { 0 };
+                let result = (self.accum << 1) | carry_bit;
+                self.accum = result;
+                self.status_reg.carry = high_bit == 1;
+                self.status_reg.zero = result == 0;
+                self.status_reg.negative = result >> 7 == 1;
+                self.pc + 1
             }
             Instruction::IncrementX => {
                 self.x = self.x.wrapping_add(1);
@@ -515,6 +576,14 @@ impl Cpu {
                 let accum = self.accum;
                 self.push_on_stack(accum);
                 self.pc + 1
+            }
+            Instruction::ReturnFromInterrupt => {
+                let status_reg = self.pop_off_stack();
+                self.status_reg.set_byte(status_reg);
+                let addr_low_byte = self.pop_off_stack() as u16;
+                let addr_high_byte = self.pop_off_stack() as u16;
+                let addr = (addr_high_byte << 8) | addr_low_byte;
+                addr
             }
             Instruction::Noop => {
                 self.pc + 1

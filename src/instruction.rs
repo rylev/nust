@@ -7,6 +7,7 @@ pub enum Instruction {
     ClearOverflow,
     SetDecimal,
 
+    ReturnFromInterrupt,
 
     Jump(AddressMode),
     JumpToSubRoutine(AddressMode),
@@ -28,6 +29,11 @@ pub enum Instruction {
     BranchOnOverflowClear(AddressMode),
 
     BitTest(AddressMode),
+
+    LogicalShiftRight(AddressMode),
+    ArithmeticShiftLeft(AddressMode),
+    RotateRight(AddressMode),
+    RotateLeft(AddressMode),
 
     IncrementX,
     IncrementY,
@@ -68,5 +74,6 @@ pub enum AddressMode {
     Relative(u8),
     Indirect(u16),
     IndirectX(u8),
-    IndirectY(u8)
+    IndirectY(u8),
+    Accumulator
 }
