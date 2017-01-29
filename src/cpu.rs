@@ -529,7 +529,17 @@ impl Cpu {
         let addr_addr = addr_addr_second << 8 | addr_addr_first;
 
         let addr_first = self.interconnect.read_byte(addr_addr) as u16;
-        let addr_second = self.interconnect.read_byte(addr_addr + 1) as u16;
+
+        // This replicates a bug with the 6502. If the indirect address is on a
+        // page boundry (i.e. it's least significant byte is 0xFF) then the address
+        // used to fetch the most significant byte wraps around to the beginning
+        // of the page
+        let addr_second = if addr_addr_first == 0xFF {
+            let faulty_address  = addr_addr_second << 8 | 0x00;
+            self.interconnect.read_byte(faulty_address) as u16
+        } else {
+            self.interconnect.read_byte(addr_addr + 1) as u16
+        };
         (addr_second << 8u16) | addr_first // Second byte is the most signficant (i.e. little indian)
     }
 
@@ -547,7 +557,6 @@ impl Cpu {
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::Jump(AddressMode::Absolute(addr)) | Instruction::Jump(AddressMode::Indirect(addr)) => {
-                println!("{:x}", addr);
                 addr
             }
             Instruction::JumpToSubRoutine(AddressMode::Absolute(addr)) => {
