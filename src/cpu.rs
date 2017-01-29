@@ -130,6 +130,10 @@ impl Cpu {
                 let addr = self.absolute_plus_y_address();
                 StoreAccum(addr)
             }
+            0x9d => {
+                let addr = self.absolute_plus_x_address();
+                StoreAccum(addr)
+            }
 
 
             0xa0 => {
@@ -148,6 +152,10 @@ impl Cpu {
                 let addr = self.zero_page_plus_x_address();
                 LoadY(addr)
             }
+            0xbc => {
+                let addr = self.absolute_plus_x_address();
+                LoadY(addr)
+            }
             0xa2 => {
                 let value = self.immediate_value();
                 LoadX(value)
@@ -160,6 +168,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 LoadX(addr)
             }
+            0xb6 => {
+                let addr = self.zero_page_plus_y_address();
+                LoadX(addr)
+            }
 
             0x8e => {
                 let addr = self.absolute_address();
@@ -167,6 +179,10 @@ impl Cpu {
             }
             0x86 => {
                 let addr = self.zero_page_address();
+                StoreX(addr)
+            }
+            0x96 => {
+                let addr = self.zero_page_plus_y_address();
                 StoreX(addr)
             }
 
@@ -289,6 +305,10 @@ impl Cpu {
                 let addr = self.absolute_plus_y_address();
                 AddWithCarry(addr)
             }
+            0x7d => {
+                let addr = self.absolute_plus_x_address();
+                AddWithCarry(addr)
+            }
             0xe1 => {
                 let addr = self.indirect_x_address();
                 SubtractWithCarry(addr)
@@ -317,6 +337,10 @@ impl Cpu {
                 let addr = self.absolute_plus_y_address();
                 SubtractWithCarry(addr)
             }
+            0xfd => {
+                let addr = self.absolute_plus_x_address();
+                SubtractWithCarry(addr)
+            }
             0x4a => {
                 LogicalShiftRight(Accumulator)
             }
@@ -330,6 +354,10 @@ impl Cpu {
             }
             0x56 => {
                 let addr = self.zero_page_plus_x_address();
+                LogicalShiftRight(addr)
+            }
+            0x5e => {
+                let addr = self.absolute_plus_x_address();
                 LogicalShiftRight(addr)
             }
             0x0a => {
@@ -347,6 +375,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 ArithmeticShiftLeft(addr)
             }
+            0x1e => {
+                let addr = self.absolute_plus_x_address();
+                ArithmeticShiftLeft(addr)
+            }
             0x6a => {
                 RotateRight(Accumulator)
             }
@@ -360,6 +392,10 @@ impl Cpu {
             }
             0x76 => {
                 let addr = self.zero_page_plus_x_address();
+                RotateRight(addr)
+            }
+            0x7e => {
+                let addr = self.absolute_plus_x_address();
                 RotateRight(addr)
             }
             0x2a => {
@@ -377,6 +413,10 @@ impl Cpu {
                 let addr = self.zero_page_plus_x_address();
                 RotateLeft(addr)
             }
+            0x3e => {
+                let addr = self.absolute_plus_x_address();
+                RotateLeft(addr)
+            }
             0xe6 => {
                 let addr = self.zero_page_address();
                 Increment(addr)
@@ -389,6 +429,11 @@ impl Cpu {
                 let addr = self.zero_page_plus_x_address();
                 Increment(addr)
             }
+            0xfe => {
+                let addr = self.absolute_plus_x_address();
+                Increment(addr)
+            }
+
             0xc6 => {
                 let addr = self.zero_page_address();
                 Decrement(addr)
@@ -399,6 +444,10 @@ impl Cpu {
             }
             0xd6 => {
                 let addr = self.zero_page_plus_x_address();
+                Decrement(addr)
+            }
+            0xde => {
+                let addr = self.absolute_plus_x_address();
                 Decrement(addr)
             }
             0xe8 => {
@@ -441,6 +490,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 And(addr)
             }
+            0x3d => {
+                let addr = self.absolute_plus_x_address();
+                And(addr)
+            }
             0x31 => {
                 let addr = self.indirect_y_address();
                 And(addr)
@@ -481,6 +534,10 @@ impl Cpu {
                 let addr = self.absolute_plus_y_address();
                 Or(addr)
             }
+            0x1d => {
+                let addr = self.absolute_plus_x_address();
+                Or(addr)
+            }
             0x41 => {
                 let addr = self.indirect_x_address();
                 ExclusiveOr(addr)
@@ -507,6 +564,10 @@ impl Cpu {
             }
             0x59 => {
                 let addr = self.absolute_plus_y_address();
+                ExclusiveOr(addr)
+            }
+            0x5d => {
+                let addr = self.absolute_plus_x_address();
                 ExclusiveOr(addr)
             }
             0xc0 => {
@@ -559,6 +620,10 @@ impl Cpu {
             }
             0xd9 => {
                 let addr = self.absolute_plus_y_address();
+                Compare(addr)
+            }
+            0xdd => {
+                let addr = self.absolute_plus_x_address();
                 Compare(addr)
             }
 
@@ -618,6 +683,10 @@ impl Cpu {
         ZeroPagePlusX(addr.wrapping_add(self.x))
     }
 
+    fn zero_page_plus_y_address(&self) -> AddressMode {
+        let addr = self.interconnect.read_byte(self.pc.wrapping_add(1));
+        ZeroPagePlusY(addr.wrapping_add(self.y))
+    }
 
     fn indirect_x_address(&self) -> AddressMode {
         let addr = self.calculate_indirect_address_with_offset(self.x);
@@ -739,10 +808,8 @@ impl Cpu {
                 self.accum = value;
                 self.pc + pc_offset
             }
-            StoreAccum(Absolute(addr)) => {
-                self.interconnect.write_byte(addr, self.accum);
-                self.pc + 3
-            }
+            StoreAccum(Absolute(addr)) |
+            StoreAccum(AbsolutePlusX(addr)) |
             StoreAccum(AbsolutePlusY(addr)) => {
                 self.interconnect.write_byte(addr, self.accum);
                 self.pc + 3
@@ -761,7 +828,7 @@ impl Cpu {
                 self.load_x(value);
                 self.pc + 2
             }
-            LoadX(ZeroPage(addr)) => {
+            LoadX(ZeroPage(addr)) | LoadX(ZeroPagePlusY(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.load_x(value);
                 self.pc + 2
@@ -785,12 +852,14 @@ impl Cpu {
                 self.load_y(value);
                 self.pc + 2
             }
-            LoadY(Absolute(addr)) => {
+            LoadY(Absolute(addr)) |
+            LoadY(AbsolutePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.load_y(value);
                 self.pc + 3
             }
-            StoreX(ZeroPage(addr)) => {
+            StoreX(ZeroPage(addr)) |
+            StoreX(ZeroPagePlusY(addr)) => {
                 let value = self.x;
                 self.interconnect.write_byte(addr as u16, value);
                 self.pc + 2
@@ -855,11 +924,8 @@ impl Cpu {
                 self.add_with_carry(value);
                 self.pc + 2
             }
-            AddWithCarry(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr);
-                self.add_with_carry(value);
-                self.pc + 3
-            }
+            AddWithCarry(Absolute(addr)) |
+            AddWithCarry(AbsolutePlusX(addr)) |
             AddWithCarry(AbsolutePlusY(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.add_with_carry(value);
@@ -887,11 +953,8 @@ impl Cpu {
                 self.subtract_with_carry(value);
                 self.pc + 2
             }
-            SubtractWithCarry(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr);
-                self.subtract_with_carry(value);
-                self.pc + 3
-            }
+            SubtractWithCarry(Absolute(addr)) |
+            SubtractWithCarry(AbsolutePlusX(addr)) |
             SubtractWithCarry(AbsolutePlusY(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.subtract_with_carry(value);
@@ -912,7 +975,8 @@ impl Cpu {
                 self.logical_shift_right(value);
                 self.pc + 2
             }
-            LogicalShiftRight(Absolute(addr)) => {
+            LogicalShiftRight(Absolute(addr)) |
+            LogicalShiftRight(AbsolutePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.logical_shift_right(value);
                 self.pc + 3
@@ -928,7 +992,8 @@ impl Cpu {
                 self.arithmetic_shift_left(value);
                 self.pc + 2
             }
-            ArithmeticShiftLeft(Absolute (addr)) => {
+            ArithmeticShiftLeft(Absolute(addr)) |
+            ArithmeticShiftLeft(AbsolutePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.arithmetic_shift_left(value);
                 self.pc + 3
@@ -944,7 +1009,8 @@ impl Cpu {
                 self.rotate_right(value);
                 self.pc + 2
             }
-            RotateRight(Absolute(addr)) => {
+            RotateRight(Absolute(addr)) |
+            RotateRight(AbsolutePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.rotate_right(value);
                 self.pc + 3
@@ -960,7 +1026,8 @@ impl Cpu {
                 self.rotate_left(value);
                 self.pc + 2
             }
-            RotateLeft(Absolute(addr)) => {
+            RotateLeft(Absolute(addr)) |
+            RotateLeft(AbsolutePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.rotate_left(value);
                 self.pc + 3
@@ -970,7 +1037,8 @@ impl Cpu {
                 self.increment(addr as u16);
                 self.pc + 2
             }
-            Increment(Absolute(addr)) => {
+            Increment(Absolute(addr)) |
+            Increment(AbsolutePlusX(addr)) => {
                 self.increment(addr);
                 self.pc + 3
             }
@@ -982,11 +1050,13 @@ impl Cpu {
                 self.y = self.y.wrapping_add(1);
                 self.pc + 1
             }
-            Decrement(ZeroPage(addr)) | Decrement(ZeroPagePlusX(addr)) => {
+            Decrement(ZeroPage(addr)) |
+            Decrement(ZeroPagePlusX(addr)) => {
                 self.decrement(addr as u16);
                 self.pc + 2
             }
-            Decrement(Absolute(addr)) => {
+            Decrement(Absolute(addr)) |
+            Decrement(AbsolutePlusX(addr)) => {
                 self.decrement(addr);
                 self.pc + 3
             }
@@ -1043,13 +1113,10 @@ impl Cpu {
                 self.and(value);
                 self.pc + 2
             }
-            And(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr as u16);
-                self.and(value);
-                self.pc + 3
-            }
+            And(Absolute(addr)) |
+            And(AbsolutePlusX(addr)) |
             And(AbsolutePlusY(addr)) => {
-                let value = self.interconnect.read_byte(addr);
+                let value = self.interconnect.read_byte(addr as u16);
                 self.and(value);
                 self.pc + 3
             }
@@ -1077,11 +1144,8 @@ impl Cpu {
                 self.or(value);
                 self.pc + 2
             }
-            Or(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr);
-                self.or(value);
-                self.pc + 3
-            }
+            Or(Absolute(addr)) |
+            Or(AbsolutePlusX(addr)) |
             Or(AbsolutePlusY(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.or(value);
@@ -1092,13 +1156,10 @@ impl Cpu {
                 self.exclusive_or(value);
                 self.pc + 2
             }
-            ExclusiveOr(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr as u16);
-                self.exclusive_or(value);
-                self.pc + 3
-            }
+            ExclusiveOr(Absolute(addr)) |
+            ExclusiveOr(AbsolutePlusX(addr)) |
             ExclusiveOr(AbsolutePlusY(addr)) => {
-                let value = self.interconnect.read_byte(addr);
+                let value = self.interconnect.read_byte(addr as u16);
                 self.exclusive_or(value);
                 self.pc + 3
             }
@@ -1123,12 +1184,8 @@ impl Cpu {
                 self.compare(accum, value);
                 self.pc + 2
             }
-            Compare(Absolute(addr)) => {
-                let value = self.interconnect.read_byte(addr);
-                let accum = self.accum;
-                self.compare(accum, value);
-                self.pc + 3
-            }
+            Compare(Absolute(addr)) |
+            Compare(AbsolutePlusX(addr)) |
             Compare(AbsolutePlusY(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 let accum = self.accum;
