@@ -84,6 +84,10 @@ impl Cpu {
                 let addr = self.indirect_x_address();
                 Instruction::LoadAccum(addr)
             }
+            0xb1 => {
+                let addr = self.indirect_y_address();
+                Instruction::LoadAccum(addr)
+            }
             0x81 => {
                 let addr = self.indirect_x_address();
                 Instruction::StoreAccum(addr)
@@ -472,22 +476,24 @@ impl Cpu {
     }
 
     fn indirect_x_address(&self) -> AddressMode {
-        self.indirect_with_offset(self.x)
+        let addr = self.indirect_with_offset(self.x);
+        AddressMode::IndirectX(addr)
     }
 
     fn indirect_y_address(&self) -> AddressMode {
-        self.indirect_with_offset(self.y)
+        let addr = self.indirect_with_offset(self.y);
+        AddressMode::IndirectY(addr)
     }
 
-    fn indirect_with_offset(&self, offset: u8) -> AddressMode {
-        let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16) ;
+    fn indirect_with_offset(&self, offset: u8) -> u16 {
+        let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16);
         let addr_addr_second = addr_addr_first.wrapping_add(1);
 
-        let addr_first = self.interconnect.read_byte(addr_addr_first.wrapping_add(offset) as u16) as u16;
-        let addr_second = self.interconnect.read_byte(addr_addr_second.wrapping_add(offset) as u16) as u16;
-        let addr = (addr_second << 8u16) + addr_first; // Second byte is the most signficant (i.e. little indian)
+        let addr_first = self.interconnect.read_byte(addr_addr_first as u16) as u16;
+        let addr_second = self.interconnect.read_byte(addr_addr_second as u16) as u16;
+        let addr = (addr_second << 8u16) | addr_first; // Second byte is the most signficant (i.e. little indian)
 
-        AddressMode::IndirectX(addr)
+        addr.wrapping_add(offset as u16)
     }
 
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
@@ -539,7 +545,8 @@ impl Cpu {
                         let value = self.interconnect.read_byte(addr);
                         (value, 3)
                     }
-                    AddressMode::IndirectX(addr) => {
+                    AddressMode::IndirectX(addr) | AddressMode::IndirectY(addr) => {
+                        println!("{:x}", addr);
                         let value = self.interconnect.read_byte(addr);
                         (value, 2)
                     }
