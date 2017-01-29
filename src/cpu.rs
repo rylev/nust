@@ -134,6 +134,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::LoadY(addr)
             }
+            0xb4 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::LoadY(addr)
+            }
             0xa2 => {
                 let value = self.immediate_value();
                 Instruction::LoadX(value)
@@ -529,6 +533,11 @@ impl Cpu {
     fn zero_page_address(&self) -> AddressMode {
         let addr = self.interconnect.read_byte(self.pc + 1);
         AddressMode::ZeroPage(addr)
+    }
+
+    fn zero_page_plus_x_address(&self) -> AddressMode {
+        let addr = self.interconnect.read_byte(self.pc.wrapping_add(1).wrapping_add(self.x));
+        AddressMode::ZeroPagePlusX(addr)
     }
 
     fn absolute_plus_x_address(&self) -> AddressMode {
