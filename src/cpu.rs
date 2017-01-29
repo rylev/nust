@@ -245,11 +245,31 @@ impl Cpu {
             0x0a => {
                 Instruction::ArithmeticShiftLeft(AddressMode::Accumulator)
             }
+            0x06 => {
+                let addr = self.zero_page_address();
+                Instruction::ArithmeticShiftLeft(addr)
+            }
             0x6a => {
                 Instruction::RotateRight(AddressMode::Accumulator)
             }
+            0x66 => {
+                let addr = self.zero_page_address();
+                Instruction::RotateRight(addr)
+            }
             0x2a => {
                 Instruction::RotateLeft(AddressMode::Accumulator)
+            }
+            0x26 => {
+                let addr = self.zero_page_address();
+                Instruction::RotateLeft(addr)
+            }
+            0xe6 => {
+                let addr = self.zero_page_address();
+                Instruction::Incremenet(addr)
+            }
+            0xc6 => {
+                let addr = self.zero_page_address();
+                Instruction::Decrement(addr)
             }
             0xe8 => {
                 Instruction::IncrementX
@@ -615,24 +635,30 @@ impl Cpu {
                 self.pc + 2
             }
             Instruction::RotateRight(AddressMode::Accumulator) => {
-                let lowest_bit = self.accum & 0b1;
-                let carry_bit = if self.status_reg.carry { 1 } else { 0 };
-                let result = (self.accum >> 1) | (carry_bit << 7);
-                self.accum = result;
-                self.status_reg.carry = lowest_bit == 1;
-                self.status_reg.zero = result == 0;
-                self.status_reg.negative = result >> 7 == 1;
+                let value = self.accum;
+                self.rotate_right(value);
                 self.pc + 1
             }
+            Instruction::RotateRight(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.rotate_right(value);
+                self.pc + 2
+            }
             Instruction::RotateLeft(AddressMode::Accumulator) => {
-                let high_bit = self.accum >> 7;
-                let carry_bit = if self.status_reg.carry { 1 } else { 0 };
-                let result = (self.accum << 1) | carry_bit;
-                self.accum = result;
-                self.status_reg.carry = high_bit == 1;
-                self.status_reg.zero = result == 0;
-                self.status_reg.negative = result >> 7 == 1;
+                let value = self.accum;
+                self.rotate_left(value);
                 self.pc + 1
+            }
+            Instruction::RotateLeft(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.rotate_left(value);
+                self.pc + 2
+            }
+            Instruction::Incremenet(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                let result = value.wrapping_add(1);
+                self.interconnect.write_byte(addr as u16, result);
+                self.pc + 2
             }
             Instruction::IncrementX => {
                 self.x = self.x.wrapping_add(1);
@@ -641,6 +667,12 @@ impl Cpu {
             Instruction::IncrementY => {
                 self.y = self.y.wrapping_add(1);
                 self.pc + 1
+            }
+            Instruction::Decrement(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                let result = value.wrapping_sub(1);
+                self.interconnect.write_byte(addr as u16, result);
+                self.pc + 2
             }
             Instruction::DecrementX => {
                 self.x = self.x.wrapping_sub(1);
@@ -815,6 +847,26 @@ impl Cpu {
     fn logical_shift_right(&mut self, value: u8) {
         let lowest_bit = value & 0b1;
         let result = value >> 1;
+        self.accum = result;
+        self.status_reg.carry = lowest_bit == 1;
+        self.status_reg.zero = result == 0;
+        self.status_reg.negative = result >> 7 == 1;
+    }
+
+    fn rotate_left(&mut self, value: u8) {
+        let high_bit = value >> 7;
+        let carry_bit = if self.status_reg.carry { 1 } else { 0 };
+        let result = (value << 1) | carry_bit;
+        self.accum = result;
+        self.status_reg.carry = high_bit == 1;
+        self.status_reg.zero = result == 0;
+        self.status_reg.negative = result >> 7 == 1;
+    }
+
+    fn rotate_right(&mut self, value: u8) {
+        let lowest_bit = value & 0b1;
+        let carry_bit = if self.status_reg.carry { 1 } else { 0 };
+        let result = (value >> 1) | (carry_bit << 7);
         self.accum = result;
         self.status_reg.carry = lowest_bit == 1;
         self.status_reg.zero = result == 0;
