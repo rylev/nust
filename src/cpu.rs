@@ -106,6 +106,10 @@ impl Cpu {
                 let addr = self.zero_page_address();
                 Instruction::LoadY(addr)
             }
+            0xac => {
+                let addr = self.absolute_address();
+                Instruction::LoadY(addr)
+            }
             0xa2 => {
                 let value = self.immediate_value();
                 Instruction::LoadX(value)
@@ -507,37 +511,32 @@ impl Cpu {
                 self.pc + 2
             }
             Instruction::LoadX(AddressMode::Immediate(value)) => {
-                self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value >> 7) == 1;
-                self.x = value;
+                self.load_x(value);
+                self.pc + 2
+            }
+            Instruction::LoadX(AddressMode::ZeroPage(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.load_x(value);
                 self.pc + 2
             }
             Instruction::LoadX(AddressMode::Absolute(addr)) => {
                 let value = self.interconnect.read_byte(addr);
-                self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value >> 7) == 1;
-                self.x = value;
+                self.load_x(value);
                 self.pc + 3
             }
-            Instruction::LoadX(AddressMode::ZeroPage(addr)) => {
-                let value = self.interconnect.read_byte(addr as u16);
-                self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value >> 7) == 1;
-                self.x = value;
-                self.pc + 2
-            }
             Instruction::LoadY(AddressMode::Immediate(value)) => {
-                self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value >> 7) == 1;
-                self.y = value;
+                self.load_y(value);
                 self.pc + 2
             }
             Instruction::LoadY(AddressMode::ZeroPage(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
-                self.status_reg.zero = value == 0;
-                self.status_reg.negative = (value >> 7) == 1;
-                self.y = value;
+                self.load_y(value);
                 self.pc + 2
+            }
+            Instruction::LoadY(AddressMode::Absolute(addr)) => {
+                let value = self.interconnect.read_byte(addr);
+                self.load_y(value);
+                self.pc + 3
             }
             Instruction::StoreX(AddressMode::ZeroPage(addr)) => {
                 let value = self.x;
@@ -833,6 +832,18 @@ impl Cpu {
             }
             _ => panic!("Unrecognized instruction {:?}", instruction)
         }
+    }
+
+    fn load_x(&mut self, value: u8) {
+        self.status_reg.zero = value == 0;
+        self.status_reg.negative = (value >> 7) == 1;
+        self.x = value;
+    }
+
+    fn load_y(&mut self, value: u8) {
+        self.status_reg.zero = value == 0;
+        self.status_reg.negative = (value >> 7) == 1;
+        self.y = value;
     }
 
     fn arithmetic_shift_left(&mut self, value: u8) {
