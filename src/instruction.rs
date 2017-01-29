@@ -68,8 +68,8 @@ pub enum Instruction {
 #[derive(Debug)]
 pub enum AddressMode {
     Absolute(u16),
-    AbsolutePlusX(u16, u8),
-    AbsolutePlusY(u16, u8),
+    AbsolutePlusX(u16),
+    AbsolutePlusY(u16),
     ZeroPage(u8),
     ZeroPagePlusX(u8),
     ZeroPagePlusY(u8),
