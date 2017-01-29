@@ -59,6 +59,14 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::Jump(addr)
             }
+            0x20 => {
+                let addr = self.absolute_address();
+                Instruction::JumpToSubRoutine(addr)
+            }
+            0x6c => {
+                let addr = self.indirect_address();
+                Instruction::Jump(addr)
+            }
             0x60 => {
                 Instruction::ReturnFromSubRoutine
             }
@@ -161,10 +169,6 @@ impl Cpu {
                 let addr = self.relative_address();
                 Instruction::BranchOnCarry(addr)
 
-            }
-            0x20 => {
-                let addr = self.absolute_address();
-                Instruction::JumpToSubRoutine(addr)
             }
             0xea => {
                 Instruction::Noop
@@ -504,16 +508,32 @@ impl Cpu {
     }
 
     fn indirect_x_address(&self) -> AddressMode {
-        let addr = self.indirect_with_offset(self.x);
+        let addr = self.calculate_indirect_address_with_offset(self.x);
         AddressMode::IndirectX(addr)
     }
 
     fn indirect_y_address(&self) -> AddressMode {
-        let addr = self.indirect_with_offset(self.y);
+        let addr = self.calculate_indirect_address_with_offset(self.y);
         AddressMode::IndirectY(addr)
     }
 
-    fn indirect_with_offset(&self, offset: u8) -> u16 {
+    fn indirect_address(&self) -> AddressMode {
+        let addr = self.calculate_indirect_address();
+        AddressMode::Indirect(addr)
+    }
+
+    fn calculate_indirect_address(&self) -> u16 {
+        let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16) as u16;
+        let addr_addr_second = self.interconnect.read_byte(self.pc + 2 as u16) as u16;
+
+        let addr_addr = addr_addr_second << 8 | addr_addr_first;
+
+        let addr_first = self.interconnect.read_byte(addr_addr) as u16;
+        let addr_second = self.interconnect.read_byte(addr_addr + 1) as u16;
+        (addr_second << 8u16) | addr_first // Second byte is the most signficant (i.e. little indian)
+    }
+
+    fn calculate_indirect_address_with_offset(&self, offset: u8) -> u16 {
         let addr_addr_first = self.interconnect.read_byte(self.pc + 1 as u16);
         let addr_addr_second = addr_addr_first.wrapping_add(1);
 
@@ -526,7 +546,8 @@ impl Cpu {
 
     fn execute_instruction(&mut self, instruction: Instruction) -> u16 {
         match instruction {
-            Instruction::Jump(AddressMode::Absolute(addr)) => {
+            Instruction::Jump(AddressMode::Absolute(addr)) | Instruction::Jump(AddressMode::Indirect(addr)) => {
+                println!("{:x}", addr);
                 addr
             }
             Instruction::JumpToSubRoutine(AddressMode::Absolute(addr)) => {
@@ -574,7 +595,6 @@ impl Cpu {
                         (value, 3)
                     }
                     AddressMode::IndirectX(addr) | AddressMode::IndirectY(addr) => {
-                        println!("{:x}", addr);
                         let value = self.interconnect.read_byte(addr);
                         (value, 2)
                     }
