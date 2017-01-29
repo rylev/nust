@@ -84,6 +84,10 @@ impl Cpu {
                 let addr = self.zero_page_address();
                 Instruction::LoadAccum(addr)
             }
+            0xb5 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::LoadAccum(addr)
+            }
             0xbd => {
                 let addr = self.absolute_plus_x_address();
                 Instruction::LoadAccum(addr)
@@ -114,6 +118,10 @@ impl Cpu {
             }
             0x91 => {
                 let addr = self.indirect_y_address();
+                Instruction::StoreAccum(addr)
+            }
+            0x95 => {
+                let addr = self.zero_page_plus_x_address();
                 Instruction::StoreAccum(addr)
             }
             0x99 => {
@@ -166,6 +174,10 @@ impl Cpu {
             }
             0x8c => {
                 let addr = self.absolute_address();
+                Instruction::StoreY(addr)
+            }
+            0x94 => {
+                let addr = self.zero_page_plus_x_address();
                 Instruction::StoreY(addr)
             }
 
@@ -267,6 +279,10 @@ impl Cpu {
                 let addr = self.indirect_y_address();
                 Instruction::AddWithCarry(addr)
             }
+            0x75 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::AddWithCarry(addr)
+            }
             0x79 => {
                 let addr = self.absolute_plus_y_address();
                 Instruction::AddWithCarry(addr)
@@ -291,6 +307,10 @@ impl Cpu {
                 let addr = self.indirect_y_address();
                 Instruction::SubtractWithCarry(addr)
             }
+            0xf5 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::SubtractWithCarry(addr)
+            }
             0xf9 => {
                 let addr = self.absolute_plus_y_address();
                 Instruction::SubtractWithCarry(addr)
@@ -306,11 +326,19 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::LogicalShiftRight(addr)
             }
+            0x56 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::LogicalShiftRight(addr)
+            }
             0x0a => {
                 Instruction::ArithmeticShiftLeft(AddressMode::Accumulator)
             }
             0x06 => {
                 let addr = self.zero_page_address();
+                Instruction::ArithmeticShiftLeft(addr)
+            }
+            0x16 => {
+                let addr = self.zero_page_plus_x_address();
                 Instruction::ArithmeticShiftLeft(addr)
             }
             0x0e => {
@@ -328,6 +356,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::RotateRight(addr)
             }
+            0x76 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::RotateRight(addr)
+            }
             0x2a => {
                 Instruction::RotateLeft(AddressMode::Accumulator)
             }
@@ -339,6 +371,10 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::RotateLeft(addr)
             }
+            0x36 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::RotateLeft(addr)
+            }
             0xe6 => {
                 let addr = self.zero_page_address();
                 Instruction::Increment(addr)
@@ -347,12 +383,20 @@ impl Cpu {
                 let addr = self.absolute_address();
                 Instruction::Increment(addr)
             }
+            0xf6 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::Increment(addr)
+            }
             0xc6 => {
                 let addr = self.zero_page_address();
                 Instruction::Decrement(addr)
             }
             0xce => {
                 let addr = self.absolute_address();
+                Instruction::Decrement(addr)
+            }
+            0xd6 => {
+                let addr = self.zero_page_plus_x_address();
                 Instruction::Decrement(addr)
             }
             0xe8 => {
@@ -399,6 +443,10 @@ impl Cpu {
                 let addr = self.indirect_y_address();
                 Instruction::And(addr)
             }
+            0x35 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::And(addr)
+            }
             0x39 => {
                 let addr = self.absolute_plus_y_address();
                 Instruction::And(addr)
@@ -418,6 +466,10 @@ impl Cpu {
             0x09 => {
                 let value = self.immediate_value();
                 Instruction::Or(value)
+            }
+            0x15 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::Or(addr)
             }
             0xd => {
                 let addr = self.absolute_address();
@@ -445,6 +497,10 @@ impl Cpu {
             }
             0x51 => {
                 let addr = self.indirect_y_address();
+                Instruction::ExclusiveOr(addr)
+            }
+            0x55 => {
+                let addr = self.zero_page_plus_x_address();
                 Instruction::ExclusiveOr(addr)
             }
             0x59 => {
@@ -495,6 +551,10 @@ impl Cpu {
                 let addr = self.indirect_y_address();
                 Instruction::Compare(addr)
             }
+            0xd5 => {
+                let addr = self.zero_page_plus_x_address();
+                Instruction::Compare(addr)
+            }
             0xd9 => {
                 let addr = self.absolute_plus_y_address();
                 Instruction::Compare(addr)
@@ -536,8 +596,8 @@ impl Cpu {
     }
 
     fn zero_page_plus_x_address(&self) -> AddressMode {
-        let addr = self.interconnect.read_byte(self.pc.wrapping_add(1).wrapping_add(self.x));
-        AddressMode::ZeroPagePlusX(addr)
+        let addr = self.interconnect.read_byte(self.pc.wrapping_add(1));
+        AddressMode::ZeroPagePlusX(addr.wrapping_add(self.x))
     }
 
     fn absolute_plus_x_address(&self) -> AddressMode {
@@ -667,7 +727,7 @@ impl Cpu {
                         let value = self.interconnect.read_byte(addr.wrapping_add(offset as u16));
                         (value, 3)
                     }
-                    AddressMode::ZeroPage(addr) => {
+                    AddressMode::ZeroPage(addr) | AddressMode::ZeroPagePlusX(addr) => {
                         let value = self.interconnect.read_byte(addr as u16);
                         (value, 2)
                     }
@@ -687,7 +747,7 @@ impl Cpu {
                 self.interconnect.write_byte(addr + y as u16, self.accum);
                 self.pc + 3
             }
-            Instruction::StoreAccum(AddressMode::ZeroPage(addr)) => {
+            Instruction::StoreAccum(AddressMode::ZeroPage(addr)) | Instruction::StoreAccum(AddressMode::ZeroPagePlusX(addr)) => {
                 self.interconnect.write_byte(addr as u16, self.accum);
                 self.pc + 2
             }
@@ -718,6 +778,11 @@ impl Cpu {
                 self.load_y(value);
                 self.pc + 2
             }
+            Instruction::LoadY(AddressMode::ZeroPagePlusX(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.load_y(value);
+                self.pc + 2
+            }
             Instruction::LoadY(AddressMode::Absolute(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.load_y(value);
@@ -734,6 +799,11 @@ impl Cpu {
                 self.pc + 3
             }
             Instruction::StoreY(AddressMode::ZeroPage(addr)) => {
+                let value = self.y;
+                self.interconnect.write_byte(addr as u16, value);
+                self.pc + 2
+            }
+            Instruction::StoreY(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.y;
                 self.interconnect.write_byte(addr as u16, value);
                 self.pc + 2
@@ -792,7 +862,7 @@ impl Cpu {
                 self.add_with_carry(value);
                 self.pc + 3
             }
-            Instruction::AddWithCarry(AddressMode::ZeroPage(addr)) => {
+            Instruction::AddWithCarry(AddressMode::ZeroPage(addr)) | Instruction::AddWithCarry(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.add_with_carry(value);
                 self.pc + 2
@@ -806,7 +876,7 @@ impl Cpu {
                 self.subtract_with_carry(value);
                 self.pc + 2
             }
-            Instruction::SubtractWithCarry(AddressMode::ZeroPage(addr)) => {
+            Instruction::SubtractWithCarry(AddressMode::ZeroPage(addr)) | Instruction::SubtractWithCarry(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.subtract_with_carry(value);
                 self.pc + 2
@@ -830,7 +900,7 @@ impl Cpu {
                 self.logical_shift_right(value);
                 self.pc + 1
             }
-            Instruction::LogicalShiftRight(AddressMode::ZeroPage(addr)) => {
+            Instruction::LogicalShiftRight(AddressMode::ZeroPage(addr)) | Instruction::LogicalShiftRight(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.logical_shift_right(value);
                 self.pc + 2
@@ -845,7 +915,7 @@ impl Cpu {
                 self.arithmetic_shift_left(value);
                 self.pc + 1
             }
-            Instruction::ArithmeticShiftLeft(AddressMode::ZeroPage(addr)) => {
+            Instruction::ArithmeticShiftLeft(AddressMode::ZeroPage(addr)) | Instruction::ArithmeticShiftLeft(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.arithmetic_shift_left(value);
                 self.pc + 2
@@ -860,7 +930,7 @@ impl Cpu {
                 self.rotate_right(value);
                 self.pc + 1
             }
-            Instruction::RotateRight(AddressMode::ZeroPage(addr)) => {
+            Instruction::RotateRight(AddressMode::ZeroPage(addr)) | Instruction::RotateRight(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.rotate_right(value);
                 self.pc + 2
@@ -875,7 +945,7 @@ impl Cpu {
                 self.rotate_left(value);
                 self.pc + 1
             }
-            Instruction::RotateLeft(AddressMode::ZeroPage(addr)) => {
+            Instruction::RotateLeft(AddressMode::ZeroPage(addr)) | Instruction::RotateLeft(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.rotate_left(value);
                 self.pc + 2
@@ -885,7 +955,7 @@ impl Cpu {
                 self.rotate_left(value);
                 self.pc + 3
             }
-            Instruction::Increment(AddressMode::ZeroPage(addr)) => {
+            Instruction::Increment(AddressMode::ZeroPage(addr)) | Instruction::Increment(AddressMode::ZeroPagePlusX(addr)) => {
                 self.increment(addr as u16);
                 self.pc + 2
             }
@@ -901,7 +971,7 @@ impl Cpu {
                 self.y = self.y.wrapping_add(1);
                 self.pc + 1
             }
-            Instruction::Decrement(AddressMode::ZeroPage(addr)) => {
+            Instruction::Decrement(AddressMode::ZeroPage(addr)) | Instruction::Decrement(AddressMode::ZeroPagePlusX(addr)) => {
                 self.decrement(addr as u16);
                 self.pc + 2
             }
@@ -957,7 +1027,7 @@ impl Cpu {
                 self.and(value);
                 self.pc + 2
             }
-            Instruction::And(AddressMode::ZeroPage(addr)) => {
+            Instruction::And(AddressMode::ZeroPage(addr)) | Instruction::And(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.and(value);
                 self.pc + 2
@@ -986,6 +1056,11 @@ impl Cpu {
                 self.or(value);
                 self.pc + 2
             }
+            Instruction::Or(AddressMode::ZeroPagePlusX(addr)) => {
+                let value = self.interconnect.read_byte(addr as u16);
+                self.or(value);
+                self.pc + 2
+            }
             Instruction::Or(AddressMode::IndirectX(addr)) | Instruction::Or(AddressMode::IndirectY(addr)) => {
                 let value = self.interconnect.read_byte(addr);
                 self.or(value);
@@ -1001,7 +1076,7 @@ impl Cpu {
                 self.or(value);
                 self.pc + 3
             }
-            Instruction::ExclusiveOr(AddressMode::ZeroPage(addr)) => {
+            Instruction::ExclusiveOr(AddressMode::ZeroPage(addr)) | Instruction::ExclusiveOr(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 self.exclusive_or(value);
                 self.pc + 2
@@ -1031,7 +1106,7 @@ impl Cpu {
                 self.compare(accum, value);
                 self.pc + 2
             }
-            Instruction::Compare(AddressMode::ZeroPage(addr)) => {
+            Instruction::Compare(AddressMode::ZeroPage(addr)) | Instruction::Compare(AddressMode::ZeroPagePlusX(addr)) => {
                 let value = self.interconnect.read_byte(addr as u16);
                 let accum = self.accum;
                 self.compare(accum, value);
