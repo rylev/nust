@@ -36,7 +36,7 @@ pub enum Instruction {
     RotateRight(AddressMode),
     RotateLeft(AddressMode),
 
-    Incremenet(AddressMode),
+    Increment(AddressMode),
     Decrement(AddressMode),
     IncrementX,
     IncrementY,
